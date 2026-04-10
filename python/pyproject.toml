@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hipgraph-bridge"
+version = "0.1.0"
+description = "CUDA Graph → HIP Graph translation layer for gfx1030 RDNA2"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Carlos Fundora"}]
+dependencies = ["torch>=2.9"]
+
+[project.entry-points."torch.backends"]
+hipgraph_bridge = "hipgraph_bridge.compile_backend"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["hipgraph_bridge*"]
