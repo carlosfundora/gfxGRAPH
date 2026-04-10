@@ -7,28 +7,84 @@ Calling enable() patches:
   - Installs atexit handler for clean shutdown
 
 Calling disable() restores all originals.
+
+Observability:
+  - gfxgraph.stats()        → performance counters
+  - gfxgraph.health_check() → quick smoke test
+  - HGB_LOG_LEVEL=debug|info|warn|error  → structured logging
 """
 
 import atexit
 import logging
+import os
+import threading
 import time
 from typing import Optional
 
 _log = logging.getLogger("gfxgraph")
 
-# State
+# ---------- Structured logging (obs-logging) ----------
+
+_LOG_LEVELS = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warn": logging.WARNING,
+    "warning": logging.WARNING,
+    "error": logging.ERROR,
+}
+
+
+def _configure_logging() -> None:
+    """Apply HGB_LOG_LEVEL from environment if set."""
+    level_str = os.environ.get("HGB_LOG_LEVEL", "").lower()
+    if level_str in _LOG_LEVELS:
+        _log.setLevel(_LOG_LEVELS[level_str])
+
+
+_configure_logging()
+
+# ---------- State ----------
+
 _enabled = False
 _validate_mode = False
 _originals = {}  # stash for monkey-patched originals
+_stats_lock = threading.Lock()
 _stats = {
     "enabled_at": None,
     "capture_count": 0,
     "replay_count": 0,
     "fallback_count": 0,
     "validation_failures": 0,
+    "avg_replay_us": 0.0,
+    "_total_replay_us": 0.0,
 }
 _atexit_registered = False
 
+
+# ---------- Counter helpers (obs-counters) ----------
+
+def bump(counter: str, amount: int = 1) -> None:
+    """Thread-safe counter increment. Used by bridge modules."""
+    with _stats_lock:
+        _stats[counter] = _stats.get(counter, 0) + amount
+
+
+def record_replay_us(us: float) -> None:
+    """Record a replay duration in microseconds, update running average."""
+    with _stats_lock:
+        _stats["replay_count"] += 1
+        _stats["_total_replay_us"] += us
+        _stats["avg_replay_us"] = (
+            _stats["_total_replay_us"] / _stats["replay_count"]
+        )
+
+
+def get_validate_mode() -> bool:
+    """Check whether validation mode is active."""
+    return _validate_mode
+
+
+# ---------- Public API ----------
 
 def enable(*, debug: bool = False, validate: bool = False) -> None:
     """Activate gfxGRAPH — patches torch for transparent CUDA Graph parity.
@@ -36,7 +92,8 @@ def enable(*, debug: bool = False, validate: bool = False) -> None:
     Args:
         debug: Enable verbose debug logging (also via HGB_DEBUG=1)
         validate: Enable validation mode — compares graph output vs eager
-                  output to catch silent correctness bugs (PyTorch #155684)
+                  output to catch silent correctness bugs (PyTorch #155684).
+                  Also activatable via GFXGRAPH=validate.
     """
     global _enabled, _validate_mode, _atexit_registered
 
@@ -48,10 +105,9 @@ def enable(*, debug: bool = False, validate: bool = False) -> None:
 
     if debug:
         _log.setLevel(logging.DEBUG)
-        import os
         os.environ["HGB_DEBUG"] = "1"
 
-    _log.info("Enabling gfxGRAPH v0.2.0 for gfx1030/RDNA2")
+    _log.info("Enabling gfxGRAPH v0.3.0 for gfx1030/RDNA2")
 
     # Try to init native bridge (non-fatal if .so not built)
     _init_native(debug)
@@ -80,7 +136,8 @@ def enable(*, debug: bool = False, validate: bool = False) -> None:
         atexit.register(_shutdown)
         _atexit_registered = True
 
-    _stats["enabled_at"] = time.time()
+    with _stats_lock:
+        _stats["enabled_at"] = time.time()
     _enabled = True
     _log.info("gfxGRAPH enabled successfully")
 
@@ -109,21 +166,25 @@ def is_enabled() -> bool:
 
 
 def stats() -> dict:
-    """Return performance/diagnostic counters."""
-    return dict(_stats)
+    """Return performance/diagnostic counters (thread-safe snapshot)."""
+    with _stats_lock:
+        out = {k: v for k, v in _stats.items() if not k.startswith("_")}
+    return out
 
 
 def health_check() -> dict:
     """Quick smoke test: capture + replay a trivial graph on gfx1030.
 
-    Returns dict with 'ok' (bool), 'gpu' (str), 'rocm' (str),
-    'native_bridge' (bool), 'details' (str).
+    Returns dict with 'ok', 'gpu', 'rocm', 'native_bridge',
+    'vram_total_mb', 'vram_free_mb', 'details'.
     """
     result = {
         "ok": False,
         "gpu": "unknown",
         "rocm": "unknown",
         "native_bridge": False,
+        "vram_total_mb": 0,
+        "vram_free_mb": 0,
         "details": "",
     }
 
@@ -137,6 +198,14 @@ def health_check() -> dict:
         props = torch.cuda.get_device_properties(0)
         result["rocm"] = getattr(props, "gcnArchName", "unknown")
 
+        # VRAM info
+        try:
+            free, total = torch.cuda.mem_get_info(0)
+            result["vram_total_mb"] = round(total / (1024 * 1024))
+            result["vram_free_mb"] = round(free / (1024 * 1024))
+        except Exception:
+            pass
+
         # Test basic graph capture/replay
         x = torch.ones(4, device="cuda")
         g = torch.cuda.CUDAGraph()
@@ -149,8 +218,16 @@ def health_check() -> dict:
         g.replay()
         torch.cuda.synchronize()
 
-        result["ok"] = True
-        result["details"] = "Basic graph capture/replay OK"
+        # Verify correctness
+        expected = torch.ones(4, device="cuda") * 2
+        if torch.allclose(y, expected):
+            result["ok"] = True
+            result["details"] = "Graph capture/replay OK, output verified"
+        else:
+            result["details"] = (
+                "Graph replay produced wrong output — "
+                "possible PyTorch #155684 (HIP Graph correctness bug)"
+            )
 
     except Exception as e:
         result["details"] = f"Health check failed: {e}"
