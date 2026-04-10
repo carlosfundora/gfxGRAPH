@@ -11,6 +11,7 @@
 
 #pragma once
 #include <hip/hip_runtime.h>
+#include <pthread.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,6 +54,7 @@ typedef struct {
     hipGraphExec_t*   branch_execs;
     int               num_branches;
     int               device_id;
+    pthread_mutex_t   lock;
 } hgb_conditional_t;
 
 /**
@@ -107,6 +109,7 @@ typedef struct {
     int               active;
     int               launched;
     int               device_id;
+    pthread_mutex_t   lock;
 } hgb_pipeline_t;
 
 /**
@@ -140,7 +143,9 @@ typedef struct {
     hipGraphExec_t*  execs;
     hipGraph_t*      graphs;
     void**           static_bufs;
+    hipEvent_t*      events;       /**< Per-bucket event for in-flight tracking */
     int              device_id;
+    pthread_mutex_t  lock;
 } hgb_shape_pool_t;
 
 /**
@@ -188,7 +193,9 @@ typedef struct {
     hipGraphExec_t  exec;
     hipGraphNode_t* child_nodes;
     int             num_children;
+    hipStream_t     last_stream;  /**< Last stream used for launch (for sync-before-update) */
     int             device_id;
+    pthread_mutex_t lock;
 } hgb_composed_graph_t;
 
 /**

@@ -12,7 +12,7 @@
 
 static std::atomic<int> g_initialized{0};
 static std::atomic<int> g_debug{0};
-static std::once_flag   g_init_flag;
+static std::mutex       g_init_mutex;
 static hipDeviceProp_t  g_dev_props;
 static int              g_device_id = -1;
 static int              g_rocm_runtime_version = 0;
@@ -109,18 +109,17 @@ static hipError_t hgb_init_impl(void) {
 hipError_t hgb_init(void) {
     if (g_initialized.load(std::memory_order_acquire)) return hipSuccess;
 
-    static hipError_t init_result = hipSuccess;
-    static std::mutex init_mutex;
-    std::lock_guard<std::mutex> lock(init_mutex);
+    std::lock_guard<std::mutex> lock(g_init_mutex);
 
     /* Double-check after acquiring lock */
     if (g_initialized.load(std::memory_order_acquire)) return hipSuccess;
 
-    init_result = hgb_init_impl();
-    return init_result;
+    return hgb_init_impl();
 }
 
 void hgb_shutdown(void) {
+    std::lock_guard<std::mutex> lock(g_init_mutex);
+
     if (!g_initialized.load(std::memory_order_acquire)) return;
     hgb_log("Shutting down gfxGRAPH");
     g_initialized.store(0, std::memory_order_release);

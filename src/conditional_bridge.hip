@@ -7,7 +7,9 @@
  * This avoids hipGraphNodeSetEnabled on child graph nodes, which is
  * unsupported on HIP 7.2 (only kernel/memset/memcpy nodes supported).
  *
- * Thread safety: NOT thread-safe. Caller must serialize access.
+ * Thread safety: All public functions are protected by a per-object mutex,
+ * matching CUDA Graph thread-safety guarantees.
+ *
  * Destruction: caller must ensure no launches are in-flight on the
  * stream passed to launch(). Destroy calls hipDeviceSynchronize()
  * as a safety net, but this is expensive — prefer explicit sync.
@@ -21,7 +23,13 @@
 extern void hgb_log(const char* fmt, ...);
 extern int hgb_is_initialized(void);
 
-/* Validate device affinity, return error if mismatched */
+/* RAII lock guard for pthread_mutex_t */
+struct MutexGuard {
+    pthread_mutex_t* m;
+    MutexGuard(pthread_mutex_t* mtx) : m(mtx) { pthread_mutex_lock(m); }
+    ~MutexGuard() { pthread_mutex_unlock(m); }
+};
+
 static hipError_t check_device(int expected) {
     int cur;
     hipGetDevice(&cur);
@@ -42,6 +50,7 @@ hipError_t hgb_conditional_create(
         return hipErrorInvalidValue;
 
     memset(out, 0, sizeof(*out));
+    pthread_mutex_init(&out->lock, nullptr);
     out->num_branches = count;
     hipGetDevice(&out->device_id);
 
@@ -80,6 +89,8 @@ hipError_t hgb_conditional_launch(
     if (branch_index < 0 || branch_index >= cond->num_branches)
         return hipErrorInvalidValue;
 
+    MutexGuard guard(&cond->lock);
+
     hipError_t err = check_device(cond->device_id);
     if (err != hipSuccess) return err;
 
@@ -94,11 +105,11 @@ hipError_t hgb_conditional_launch_by_flag(
     if (!hgb_is_initialized()) return hipErrorNotInitialized;
     if (!cond || !d_flag) return hipErrorInvalidValue;
 
-    /* Device check FIRST, before touching stream or device memory */
+    MutexGuard guard(&cond->lock);
+
     hipError_t err = check_device(cond->device_id);
     if (err != hipSuccess) return err;
 
-    /* Synchronize the stream to ensure d_flag is up to date */
     err = hipStreamSynchronize(stream);
     if (err != hipSuccess) return err;
 
@@ -118,32 +129,28 @@ hipError_t hgb_conditional_launch_by_flag(
 void hgb_conditional_destroy(hgb_conditional_t* cond) {
     if (!cond) return;
 
-    /*
-     * Safety net: sync ALL work on this device before destroying execs.
-     * Launches happen on caller-provided streams which we don't track,
-     * so hipDeviceSynchronize is the only way to guarantee quiescence.
-     * Callers should prefer explicit stream sync before calling destroy.
-     */
+    pthread_mutex_lock(&cond->lock);
+
     if (cond->device_id >= 0) {
         int prev_dev;
         hipGetDevice(&prev_dev);
-        if (prev_dev != cond->device_id) {
+        if (prev_dev != cond->device_id)
             hipSetDevice(cond->device_id);
-        }
         hipDeviceSynchronize();
-        if (prev_dev != cond->device_id) {
+        if (prev_dev != cond->device_id)
             hipSetDevice(prev_dev);
-        }
     }
 
     for (int i = 0; i < cond->num_branches; i++) {
-        if (cond->branch_execs && cond->branch_execs[i]) {
+        if (cond->branch_execs && cond->branch_execs[i])
             hipGraphExecDestroy(cond->branch_execs[i]);
-        }
     }
 
     free(cond->branch_execs);
     cond->branch_execs = nullptr;
     cond->num_branches = 0;
     cond->device_id = -1;
+
+    pthread_mutex_unlock(&cond->lock);
+    pthread_mutex_destroy(&cond->lock);
 }

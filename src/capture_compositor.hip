@@ -5,6 +5,9 @@
  * Strategy: Capture sub-graphs independently, then assemble them as
  * child graph nodes in a parent graph with dependency edges.
  * ~95% of nested capture performance.
+ *
+ * Thread safety: All public functions are protected by a per-object mutex,
+ * matching CUDA Graph thread-safety guarantees.
  */
 #include "hipgraph_bridge.h"
 #include <cstdlib>
@@ -12,6 +15,12 @@
 
 extern void hgb_log(const char* fmt, ...);
 extern int hgb_is_initialized(void);
+
+struct MutexGuard {
+    pthread_mutex_t* m;
+    MutexGuard(pthread_mutex_t* mtx) : m(mtx) { pthread_mutex_lock(m); }
+    ~MutexGuard() { pthread_mutex_unlock(m); }
+};
 
 hipError_t hgb_compose_graphs(
     hipGraph_t*           sub_graphs,
@@ -37,7 +46,9 @@ hipError_t hgb_compose_graphs(
     }
 
     memset(out, 0, sizeof(*out));
+    pthread_mutex_init(&out->lock, nullptr);
     out->num_children = count;
+    out->last_stream = nullptr;
     hipGetDevice(&out->device_id);
 
     out->child_nodes = (hipGraphNode_t*)calloc(count, sizeof(hipGraphNode_t));
@@ -98,6 +109,8 @@ hipError_t hgb_compose_update_child(
     if (child_index < 0 || child_index >= comp->num_children)
         return hipErrorInvalidValue;
 
+    MutexGuard guard(&comp->lock);
+
     /* Device affinity check */
     int cur_dev;
     hipGetDevice(&cur_dev);
@@ -105,6 +118,14 @@ hipError_t hgb_compose_update_child(
         hgb_log("ERROR: composed graph on device %d, current is %d",
                 comp->device_id, cur_dev);
         return hipErrorInvalidDevice;
+    }
+
+    /* Sync any in-flight launch before mutating the exec */
+    if (comp->last_stream) {
+        hipError_t sync_err = hipStreamSynchronize(comp->last_stream);
+        if (sync_err != hipSuccess) {
+            hgb_log("WARNING: stream sync before update failed: %d", (int)sync_err);
+        }
     }
 
     return hipGraphExecChildGraphNodeSetParams(
@@ -121,6 +142,8 @@ hipError_t hgb_compose_launch(
     if (!hgb_is_initialized()) return hipErrorNotInitialized;
     if (!comp || !comp->exec) return hipErrorInvalidValue;
 
+    MutexGuard guard(&comp->lock);
+
     /* Device affinity check */
     int cur_dev;
     hipGetDevice(&cur_dev);
@@ -130,11 +153,14 @@ hipError_t hgb_compose_launch(
         return hipErrorInvalidDevice;
     }
 
+    comp->last_stream = stream;
     return hipGraphLaunch(comp->exec, stream);
 }
 
 void hgb_compose_destroy(hgb_composed_graph_t* comp) {
     if (!comp) return;
+
+    pthread_mutex_lock(&comp->lock);
 
     /* Sync on the owning device before destroying resources */
     if (comp->device_id >= 0) {
@@ -161,4 +187,7 @@ void hgb_compose_destroy(hgb_composed_graph_t* comp) {
     comp->child_nodes = nullptr;
     comp->num_children = 0;
     comp->device_id = -1;
+
+    pthread_mutex_unlock(&comp->lock);
+    pthread_mutex_destroy(&comp->lock);
 }
