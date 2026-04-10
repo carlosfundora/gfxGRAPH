@@ -18,6 +18,10 @@ from hipgraph_bridge.shape_bucketing import ShapeBucketPool
 
 _log = logging.getLogger("gfxgraph")
 
+# Capture the original CUDAGraph class BEFORE monkey-patching replaces it.
+# This module is imported by gfxgraph.__init__ which happens before enable().
+_OriginalCUDAGraph = torch.cuda.CUDAGraph
+
 
 def _validate_tensor(t: torch.Tensor, name: str = "input") -> None:
     """Raise if tensor is not on CUDA or not contiguous."""
@@ -55,6 +59,30 @@ class BridgedCUDAGraph:
         self._eager_fallback = False  # set True on capture failure
         self._last_input = None      # for validation mode
 
+    # ---- PyTorch CUDAGraph low-level API compatibility ----
+    # These methods make BridgedCUDAGraph a true drop-in for torch.cuda.CUDAGraph.
+    # When callers use the low-level API (capture_begin/capture_end/replay()),
+    # we delegate directly to a real CUDAGraph with no eager-fallback wrapping,
+    # because the caller (e.g. SGLang's cuda_graph_runner) handles errors itself.
+
+    def capture_begin(self, *args, **kwargs):
+        """Start graph capture — delegates to real CUDAGraph."""
+        if self._graph is None:
+            self._graph = _OriginalCUDAGraph()
+        self._graph.capture_begin(*args, **kwargs)
+
+    def capture_end(self):
+        """End graph capture — delegates to real CUDAGraph."""
+        if self._graph is not None:
+            self._graph.capture_end()
+            _bump_capture()
+
+    def pool(self):
+        """Return the mempool id — delegates to real CUDAGraph."""
+        if self._graph is not None:
+            return self._graph.pool()
+        return None
+
     class _CaptureContext:
         def __init__(self, parent, dynamic_shapes, buckets, conditional_branches):
             self.parent = parent
@@ -76,7 +104,7 @@ class BridgedCUDAGraph:
 
             # Standard capture path — with try/except for eager fallback
             try:
-                self.parent._graph = torch.cuda.CUDAGraph()
+                self.parent._graph = _OriginalCUDAGraph()
                 torch.cuda.synchronize()
                 self.parent._graph.capture_begin()
             except Exception as e:
@@ -218,6 +246,39 @@ class BridgedCUDAGraph:
         self._static_output = None
         self._model_fn = None
         self._eager_fallback = False
+
+    # ---- Additional CUDAGraph API stubs (future-proofing) ----
+
+    def debug_dump(self, path: str) -> None:
+        """Dump graph debug info to file — delegates to real CUDAGraph if available."""
+        if self._graph is not None and hasattr(self._graph, "debug_dump"):
+            self._graph.debug_dump(path)
+        else:
+            _log.debug("debug_dump: no captured graph to dump")
+
+    def enable_debug_mode(self) -> None:
+        """Enable debug mode on the underlying graph."""
+        if self._graph is not None and hasattr(self._graph, "enable_debug_mode"):
+            self._graph.enable_debug_mode()
+
+    def register_generator_state(self, gen) -> None:
+        """Register RNG generator state for reproducible graph replay."""
+        if self._graph is not None and hasattr(self._graph, "register_generator_state"):
+            self._graph.register_generator_state(gen)
+
+    @property
+    def raw_cuda_graph(self):
+        """Access the underlying cudaGraph_t / hipGraph_t handle."""
+        if self._graph is not None and hasattr(self._graph, "raw_cuda_graph"):
+            return self._graph.raw_cuda_graph
+        return None
+
+    @property
+    def raw_cuda_graph_exec(self):
+        """Access the underlying cudaGraphExec_t / hipGraphExec_t handle."""
+        if self._graph is not None and hasattr(self._graph, "raw_cuda_graph_exec"):
+            return self._graph.raw_cuda_graph_exec
+        return None
 
 
 # ---------- Counter helpers (import-safe) ----------

@@ -12,9 +12,6 @@ license = {text = "MIT"}
 authors = [{name = "Carlos Fundora"}]
 dependencies = ["torch>=2.9"]
 
-[project.entry-points."torch.backends"]
-hipgraph_bridge = "hipgraph_bridge.compile_backend"
-
 [project.scripts]
 gfxgraph = "gfxgraph.__main__:main"
 
