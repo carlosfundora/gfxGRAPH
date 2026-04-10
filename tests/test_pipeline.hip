@@ -37,7 +37,7 @@ int main() {
     hgb_pipeline_t pipe;
     err = hgb_pipeline_create(graph, &pipe);
     assert(err == hipSuccess);
-    printf("  Pipeline created, uploaded=%d\n", pipe.uploaded);
+    printf("  Pipeline created, active=%d, launched=%d\n", pipe.active, pipe.launched);
 
     /* Launch 10 times */
     for (int i = 0; i < 10; i++) {

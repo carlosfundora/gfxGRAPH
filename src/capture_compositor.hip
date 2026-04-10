@@ -11,6 +11,7 @@
 #include <cstring>
 
 extern void hgb_log(const char* fmt, ...);
+extern int hgb_is_initialized(void);
 
 hipError_t hgb_compose_graphs(
     hipGraph_t*           sub_graphs,
@@ -18,11 +19,26 @@ hipError_t hgb_compose_graphs(
     const int*            deps,
     hgb_composed_graph_t* out
 ) {
+    if (!hgb_is_initialized()) return hipErrorNotInitialized;
     if (!sub_graphs || count <= 0 || !deps || !out)
         return hipErrorInvalidValue;
 
+    /* Validate dependency references: no forward refs, no self-refs */
+    for (int i = 0; i < count; i++) {
+        if (deps[i] == i) {
+            hgb_log("ERROR: self-dependency at index %d", i);
+            return hipErrorInvalidValue;
+        }
+        if (deps[i] >= i) {
+            hgb_log("ERROR: forward dependency [%d] → %d", i, deps[i]);
+            return hipErrorInvalidValue;
+        }
+        /* deps[i] < 0 means no dependency (root node) — that's valid */
+    }
+
     memset(out, 0, sizeof(*out));
     out->num_children = count;
+    hipGetDevice(&out->device_id);
 
     out->child_nodes = (hipGraphNode_t*)calloc(count, sizeof(hipGraphNode_t));
     if (!out->child_nodes) return hipErrorOutOfMemory;
@@ -77,9 +93,19 @@ hipError_t hgb_compose_update_child(
     int                   child_index,
     hipGraph_t            new_sub_graph
 ) {
+    if (!hgb_is_initialized()) return hipErrorNotInitialized;
     if (!comp || !comp->exec) return hipErrorInvalidValue;
     if (child_index < 0 || child_index >= comp->num_children)
         return hipErrorInvalidValue;
+
+    /* Device affinity check */
+    int cur_dev;
+    hipGetDevice(&cur_dev);
+    if (cur_dev != comp->device_id) {
+        hgb_log("ERROR: composed graph on device %d, current is %d",
+                comp->device_id, cur_dev);
+        return hipErrorInvalidDevice;
+    }
 
     return hipGraphExecChildGraphNodeSetParams(
         comp->exec,
@@ -92,12 +118,37 @@ hipError_t hgb_compose_launch(
     hgb_composed_graph_t* comp,
     hipStream_t           stream
 ) {
+    if (!hgb_is_initialized()) return hipErrorNotInitialized;
     if (!comp || !comp->exec) return hipErrorInvalidValue;
+
+    /* Device affinity check */
+    int cur_dev;
+    hipGetDevice(&cur_dev);
+    if (cur_dev != comp->device_id) {
+        hgb_log("ERROR: composed graph on device %d, current is %d",
+                comp->device_id, cur_dev);
+        return hipErrorInvalidDevice;
+    }
+
     return hipGraphLaunch(comp->exec, stream);
 }
 
 void hgb_compose_destroy(hgb_composed_graph_t* comp) {
     if (!comp) return;
+
+    /* Sync on the owning device before destroying resources */
+    if (comp->device_id >= 0) {
+        int prev_dev;
+        hipGetDevice(&prev_dev);
+        if (prev_dev != comp->device_id) {
+            hipSetDevice(comp->device_id);
+        }
+        hipDeviceSynchronize();
+        if (prev_dev != comp->device_id) {
+            hipSetDevice(prev_dev);
+        }
+    }
+
     if (comp->exec) {
         hipGraphExecDestroy(comp->exec);
         comp->exec = nullptr;
@@ -109,4 +160,5 @@ void hgb_compose_destroy(hgb_composed_graph_t* comp) {
     free(comp->child_nodes);
     comp->child_nodes = nullptr;
     comp->num_children = 0;
+    comp->device_id = -1;
 }

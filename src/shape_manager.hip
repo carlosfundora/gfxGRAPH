@@ -13,6 +13,7 @@
 #include <cstring>
 
 extern void hgb_log(const char* fmt, ...);
+extern int hgb_is_initialized(void);
 
 hipError_t hgb_shape_pool_create(
     hgb_capture_fn    graph_fn,
@@ -21,11 +22,32 @@ hipError_t hgb_shape_pool_create(
     int               num_buckets,
     hgb_shape_pool_t* out
 ) {
+    if (!hgb_is_initialized()) return hipErrorNotInitialized;
     if (!graph_fn || !buckets || num_buckets <= 0 || !out)
         return hipErrorInvalidValue;
 
+    /* Enforce max bucket limit */
+    if (num_buckets > HGB_MAX_BUCKETS) {
+        hgb_log("ERROR: num_buckets %d exceeds max %d", num_buckets, HGB_MAX_BUCKETS);
+        return hipErrorInvalidValue;
+    }
+
+    /* Validate buckets are in strictly ascending order and positive */
+    for (int i = 0; i < num_buckets; i++) {
+        if (buckets[i] <= 0) {
+            hgb_log("ERROR: bucket[%d] = %d must be positive", i, buckets[i]);
+            return hipErrorInvalidValue;
+        }
+        if (i > 0 && buckets[i] <= buckets[i - 1]) {
+            hgb_log("ERROR: buckets not ascending: [%d]=%d <= [%d]=%d",
+                    i, buckets[i], i - 1, buckets[i - 1]);
+            return hipErrorInvalidValue;
+        }
+    }
+
     memset(out, 0, sizeof(*out));
     out->num_buckets = num_buckets;
+    hipGetDevice(&out->device_id);
 
     /* Allocate arrays */
     out->bucket_sizes = (int*)malloc(num_buckets * sizeof(int));
@@ -72,7 +94,17 @@ hipError_t hgb_shape_pool_launch(
     hipStream_t       stream,
     int*              actual_bucket
 ) {
-    if (!pool || input_size <= 0) return hipErrorInvalidValue;
+    if (!hgb_is_initialized()) return hipErrorNotInitialized;
+    if (!pool || !pool->execs || input_size <= 0) return hipErrorInvalidValue;
+
+    /* Device affinity check */
+    int cur_dev;
+    hipGetDevice(&cur_dev);
+    if (cur_dev != pool->device_id) {
+        hgb_log("ERROR: shape pool on device %d, current is %d",
+                pool->device_id, cur_dev);
+        return hipErrorInvalidDevice;
+    }
 
     /* Binary search for smallest bucket >= input_size */
     int lo = 0, hi = pool->num_buckets - 1, best = -1;
@@ -107,9 +139,19 @@ hipError_t hgb_shape_pool_update_params(
     hipGraphNode_t        node,
     hipKernelNodeParams*  params
 ) {
+    if (!hgb_is_initialized()) return hipErrorNotInitialized;
     if (!pool || !params) return hipErrorInvalidValue;
     if (bucket_index < 0 || bucket_index >= pool->num_buckets)
         return hipErrorInvalidValue;
+
+    /* Device affinity check */
+    int cur_dev;
+    hipGetDevice(&cur_dev);
+    if (cur_dev != pool->device_id) {
+        hgb_log("ERROR: shape pool on device %d, current is %d",
+                pool->device_id, cur_dev);
+        return hipErrorInvalidDevice;
+    }
 
     return hipGraphExecKernelNodeSetParams(
         pool->execs[bucket_index], node, params
@@ -118,6 +160,19 @@ hipError_t hgb_shape_pool_update_params(
 
 void hgb_shape_pool_destroy(hgb_shape_pool_t* pool) {
     if (!pool) return;
+
+    /* Sync on the owning device before destroying graph resources */
+    if (pool->device_id >= 0) {
+        int prev_dev;
+        hipGetDevice(&prev_dev);
+        if (prev_dev != pool->device_id) {
+            hipSetDevice(pool->device_id);
+        }
+        hipDeviceSynchronize();
+        if (prev_dev != pool->device_id) {
+            hipSetDevice(prev_dev);
+        }
+    }
 
     for (int i = 0; i < pool->num_buckets; i++) {
         if (pool->execs && pool->execs[i])
@@ -133,4 +188,5 @@ void hgb_shape_pool_destroy(hgb_shape_pool_t* pool) {
     free(pool->execs);
     free(pool->static_bufs);
     memset(pool, 0, sizeof(*pool));
+    pool->device_id = -1;
 }

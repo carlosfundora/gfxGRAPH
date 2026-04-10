@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hipgraph-bridge"
-version = "0.1.0"
-description = "CUDA Graph → HIP Graph translation layer for gfx1030 RDNA2"
+name = "gfxgraph"
+version = "0.2.0"
+description = "Drop-in CUDA Graph parity for AMD gfx1030 RDNA2"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -15,6 +15,9 @@ dependencies = ["torch>=2.9"]
 [project.entry-points."torch.backends"]
 hipgraph_bridge = "hipgraph_bridge.compile_backend"
 
+[project.scripts]
+gfxgraph = "gfxgraph.__main__:main"
+
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["hipgraph_bridge*"]
+include = ["gfxgraph*", "hipgraph_bridge*"]

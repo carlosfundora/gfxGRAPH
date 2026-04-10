@@ -6,13 +6,19 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cstdarg>
+#include <atomic>
+#include <mutex>
 
-static int g_initialized = 0;
-static int g_debug = 0;
-static hipDeviceProp_t g_dev_props;
+static std::atomic<int> g_initialized{0};
+static std::atomic<int> g_debug{0};
+static std::once_flag   g_init_flag;
+static hipDeviceProp_t  g_dev_props;
+static int              g_device_id = -1;
+static int              g_rocm_runtime_version = 0;
 
 void hgb_log(const char* fmt, ...) {
-    if (!g_debug) return;
+    if (!g_debug.load(std::memory_order_relaxed)) return;
     va_list args;
     va_start(args, fmt);
     fprintf(stderr, "[gfxGRAPH] ");
@@ -21,22 +27,38 @@ void hgb_log(const char* fmt, ...) {
     va_end(args);
 }
 
+int hgb_is_initialized(void) {
+    return g_initialized.load(std::memory_order_acquire);
+}
+
 hgb_version_t hgb_get_version(void) {
     hgb_version_t v;
     v.major = HGB_VERSION_MAJOR;
     v.minor = HGB_VERSION_MINOR;
     v.patch = HGB_VERSION_PATCH;
     v.gfx_target = "gfx1030";
-    v.rocm_version = "7.2.0";
+
+    /* Detect ROCm version at runtime */
+    static char rocm_ver_str[32] = "unknown";
+    if (g_rocm_runtime_version > 0) {
+        int major = g_rocm_runtime_version / 10000000;
+        int minor = (g_rocm_runtime_version / 100000) % 100;
+        int patch = g_rocm_runtime_version % 100000;
+        snprintf(rocm_ver_str, sizeof(rocm_ver_str), "%d.%d.%d", major, minor, patch);
+    }
+    v.rocm_version = rocm_ver_str;
     return v;
 }
 
 hipError_t hgb_validate_gfx1030(void) {
-    hipDeviceProp_t props;
-    hipError_t err = hipGetDeviceProperties(&props, 0);
+    int dev;
+    hipError_t err = hipGetDevice(&dev);
     if (err != hipSuccess) return err;
 
-    /* gcnArchName contains "gfx1030" on RDNA2 */
+    hipDeviceProp_t props;
+    err = hipGetDeviceProperties(&props, dev);
+    if (err != hipSuccess) return err;
+
     if (strstr(props.gcnArchName, "gfx1030") == nullptr) {
         hgb_log("ERROR: expected gfx1030, got %s", props.gcnArchName);
         return hipErrorInvalidDevice;
@@ -44,18 +66,30 @@ hipError_t hgb_validate_gfx1030(void) {
     return hipSuccess;
 }
 
-hipError_t hgb_init(void) {
-    if (g_initialized) return hipSuccess;
-
+static hipError_t hgb_init_impl(void) {
     /* Check env for debug flag */
     const char* dbg = getenv("HGB_DEBUG");
-    if (dbg && dbg[0] == '1') g_debug = 1;
+    if (dbg && (dbg[0] == '1' || strcmp(dbg, "debug") == 0))
+        g_debug.store(1, std::memory_order_relaxed);
+
+    /* Also check GFXGRAPH env for debug mode */
+    const char* gfx = getenv("GFXGRAPH");
+    if (gfx && strcmp(gfx, "debug") == 0)
+        g_debug.store(1, std::memory_order_relaxed);
 
     hgb_log("Initializing gfxGRAPH v%d.%d.%d",
             HGB_VERSION_MAJOR, HGB_VERSION_MINOR, HGB_VERSION_PATCH);
 
-    hipError_t err = hipGetDeviceProperties(&g_dev_props, 0);
+    /* Get current device (not hardcoded 0) */
+    hipError_t err = hipGetDevice(&g_device_id);
     if (err != hipSuccess) return err;
+
+    err = hipGetDeviceProperties(&g_dev_props, g_device_id);
+    if (err != hipSuccess) return err;
+
+    /* Runtime ROCm version detection */
+    hipRuntimeGetVersion(&g_rocm_runtime_version);
+    hgb_log("ROCm runtime version: %d", g_rocm_runtime_version);
 
     err = hgb_validate_gfx1030();
     if (err != hipSuccess) {
@@ -63,20 +97,36 @@ hipError_t hgb_init(void) {
         /* Continue anyway — some bridges work on other RDNA */
     }
 
-    hgb_log("GPU: %s (%s)", g_dev_props.name, g_dev_props.gcnArchName);
+    hgb_log("GPU: %s (%s) on device %d",
+            g_dev_props.name, g_dev_props.gcnArchName, g_device_id);
     hgb_log("Compute units: %d, Clock: %d MHz",
             g_dev_props.multiProcessorCount, g_dev_props.clockRate / 1000);
 
-    g_initialized = 1;
+    g_initialized.store(1, std::memory_order_release);
     return hipSuccess;
 }
 
+hipError_t hgb_init(void) {
+    if (g_initialized.load(std::memory_order_acquire)) return hipSuccess;
+
+    static hipError_t init_result = hipSuccess;
+    static std::mutex init_mutex;
+    std::lock_guard<std::mutex> lock(init_mutex);
+
+    /* Double-check after acquiring lock */
+    if (g_initialized.load(std::memory_order_acquire)) return hipSuccess;
+
+    init_result = hgb_init_impl();
+    return init_result;
+}
+
 void hgb_shutdown(void) {
-    if (!g_initialized) return;
+    if (!g_initialized.load(std::memory_order_acquire)) return;
     hgb_log("Shutting down gfxGRAPH");
-    g_initialized = 0;
+    g_initialized.store(0, std::memory_order_release);
+    g_device_id = -1;
 }
 
 void hgb_set_debug(int enabled) {
-    g_debug = enabled;
+    g_debug.store(enabled, std::memory_order_relaxed);
 }

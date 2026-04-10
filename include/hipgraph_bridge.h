@@ -3,8 +3,8 @@
  * @brief gfxGRAPH — CUDA Graph → HIP Graph translation layer for gfx1030
  *
  * Bridges 4 CUDA Graph parity gaps on AMD RDNA2:
- *   Gap 51: Conditional execution (supergraph + NodeSetEnabled)
- *   Gap 52: Rapid graph launch pipeline (Upload + double-buffer)
+ *   Gap 51: Conditional execution (per-branch exec dispatch)
+ *   Gap 52: Rapid graph launch pipeline (Upload + event-tracked double-buffer)
  *   Gap 53: Dynamic input shapes (bucketing + param update)
  *   Gap 54: Capture composition (sequential + child graph nodes)
  */
@@ -19,8 +19,11 @@ extern "C" {
 /* ── Version & Lifecycle ────────────────────────────── */
 
 #define HGB_VERSION_MAJOR 0
-#define HGB_VERSION_MINOR 1
+#define HGB_VERSION_MINOR 2
 #define HGB_VERSION_PATCH 0
+
+#define HGB_MAX_BRANCHES 32
+#define HGB_MAX_BUCKETS  64
 
 typedef struct {
     int major;
@@ -41,21 +44,23 @@ hipError_t hgb_init(void);
 /** Release all cached resources. Safe to call multiple times. */
 void hgb_shutdown(void);
 
+/** Check if bridge is initialized. Returns 1 if init'd, 0 otherwise. */
+int hgb_is_initialized(void);
+
 /* ── Gap 51: Conditional Execution ──────────────────── */
 
 typedef struct {
-    hipGraphExec_t    exec;
-    hipGraphNode_t*   branch_nodes;
-    int*              branch_sizes;
+    hipGraphExec_t*   branch_execs;
     int               num_branches;
-    hipGraph_t        supergraph;
+    int               device_id;
 } hgb_conditional_t;
 
 /**
- * Build a supergraph containing all branches (disabled by default).
+ * Create a conditional graph with per-branch exec dispatch.
+ * Each branch graph is instantiated independently; launch selects one.
  *
  * @param graphs   Array of sub-graphs, one per branch
- * @param count    Number of branches (typically 2 for if/else)
+ * @param count    Number of branches (1..HGB_MAX_BRANCHES, typically 2 for if/else)
  * @param out      Populated conditional handle
  * @return hipSuccess or error code
  */
@@ -66,8 +71,7 @@ hipError_t hgb_conditional_create(
 );
 
 /**
- * Select a branch and launch.
- * Disables all branches, enables branch[index], launches exec.
+ * Select a branch by index and launch on the given stream.
  */
 hipError_t hgb_conditional_launch(
     hgb_conditional_t*  cond,
@@ -89,11 +93,20 @@ void hgb_conditional_destroy(hgb_conditional_t* cond);
 
 /* ── Gap 52: Rapid Graph Launch Pipeline ────────────── */
 
+typedef enum {
+    HGB_EXEC_IDLE      = 0,
+    HGB_EXEC_UPLOADED   = 1,
+    HGB_EXEC_IN_FLIGHT  = 2,
+} hgb_exec_state_t;
+
 typedef struct {
-    hipGraphExec_t exec[2];
-    hipStream_t    streams[2];
-    int            active;
-    int            uploaded;
+    hipGraphExec_t    exec[2];
+    hipStream_t       stream;
+    hipEvent_t        event;
+    hgb_exec_state_t  state[2];
+    int               active;
+    int               launched;
+    int               device_id;
 } hgb_pipeline_t;
 
 /**
@@ -127,6 +140,7 @@ typedef struct {
     hipGraphExec_t*  execs;
     hipGraph_t*      graphs;
     void**           static_bufs;
+    int              device_id;
 } hgb_shape_pool_t;
 
 /**
@@ -174,6 +188,7 @@ typedef struct {
     hipGraphExec_t  exec;
     hipGraphNode_t* child_nodes;
     int             num_children;
+    int             device_id;
 } hgb_composed_graph_t;
 
 /**
