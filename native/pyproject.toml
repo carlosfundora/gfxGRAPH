@@ -1,0 +1,30 @@
+[build-system]
+requires = [
+    "scikit-build-core>=0.10.0",
+    "cmake>=3.21",
+    "ninja>=1.11",
+    "packaging>=23.2",
+    "pathspec>=0.12.1",
+]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "gfxgraph-native"
+version = "0.3.1"
+description = "Native bridge companion for gfxgraph"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Carlos Fundora"}]
+
+[tool.scikit-build]
+cmake.source-dir = ".."
+cmake.build-type = "Release"
+wheel.packages = ["gfxgraph_native"]
+
+[tool.scikit-build.cmake.define]
+BUILD_TESTS = "OFF"
+BUILD_BENCHMARKS = "OFF"
+CMAKE_HIP_ARCHITECTURES = "gfx1030"
+CMAKE_PREFIX_PATH = "/opt/rocm"
+GFXGRAPH_NATIVE_INSTALL_SUBDIR = "gfxgraph_native/_native"

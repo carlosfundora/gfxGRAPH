@@ -13,14 +13,21 @@
 #include <cstdlib>
 #include <cstring>
 
-extern void hgb_log(const char* fmt, ...);
-extern int hgb_is_initialized(void);
+extern "C" void hgb_log(const char* fmt, ...);
+extern "C" int hgb_is_initialized(void);
 
 struct MutexGuard {
     pthread_mutex_t* m;
     MutexGuard(pthread_mutex_t* mtx) : m(mtx) { pthread_mutex_lock(m); }
     ~MutexGuard() { pthread_mutex_unlock(m); }
 };
+
+static void destroy_event(hipEvent_t* event) {
+    if (event && *event) {
+        hipEventDestroy(*event);
+        *event = nullptr;
+    }
+}
 
 hipError_t hgb_compose_graphs(
     hipGraph_t*           sub_graphs,
@@ -49,6 +56,7 @@ hipError_t hgb_compose_graphs(
     pthread_mutex_init(&out->lock, nullptr);
     out->num_children = count;
     out->last_stream = nullptr;
+    out->last_event = nullptr;
     hipGetDevice(&out->device_id);
 
     out->child_nodes = (hipGraphNode_t*)calloc(count, sizeof(hipGraphNode_t));
@@ -122,9 +130,26 @@ hipError_t hgb_compose_update_child(
 
     /* Sync any in-flight launch before mutating the exec */
     if (comp->last_stream) {
-        hipError_t sync_err = hipStreamSynchronize(comp->last_stream);
-        if (sync_err != hipSuccess) {
-            hgb_log("WARNING: stream sync before update failed: %d", (int)sync_err);
+        bool need_sync = true;
+
+        if (comp->last_event) {
+            hipError_t query_err = hipEventQuery(comp->last_event);
+            if (query_err == hipSuccess) {
+                need_sync = false;
+            } else if (query_err != hipErrorNotReady) {
+                hgb_log("WARNING: event query before child update failed: %d",
+                        (int)query_err);
+            }
+        } else {
+            hgb_log("WARNING: launch tracking event unavailable, falling back to stream sync");
+        }
+
+        if (need_sync) {
+            hipError_t sync_err = hipStreamSynchronize(comp->last_stream);
+            if (sync_err != hipSuccess) {
+                hgb_log("WARNING: stream sync before update failed: %d", (int)sync_err);
+                return sync_err;
+            }
         }
     }
 
@@ -154,7 +179,29 @@ hipError_t hgb_compose_launch(
     }
 
     comp->last_stream = stream;
-    return hipGraphLaunch(comp->exec, stream);
+
+    hipError_t err = hipGraphLaunch(comp->exec, stream);
+    if (err != hipSuccess) {
+        return err;
+    }
+
+    if (!comp->last_event) {
+        hipError_t create_err = hipEventCreateWithFlags(
+            &comp->last_event, hipEventDisableTiming
+        );
+        if (create_err != hipSuccess) {
+            hgb_log("WARNING: launch tracking event create failed: %d", (int)create_err);
+            return hipSuccess;
+        }
+    }
+
+    hipError_t record_err = hipEventRecord(comp->last_event, stream);
+    if (record_err != hipSuccess) {
+        hgb_log("WARNING: launch tracking event record failed: %d", (int)record_err);
+        destroy_event(&comp->last_event);
+    }
+
+    return hipSuccess;
 }
 
 void hgb_compose_destroy(hgb_composed_graph_t* comp) {
@@ -175,6 +222,8 @@ void hgb_compose_destroy(hgb_composed_graph_t* comp) {
         }
     }
 
+    destroy_event(&comp->last_event);
+
     if (comp->exec) {
         hipGraphExecDestroy(comp->exec);
         comp->exec = nullptr;
@@ -186,6 +235,7 @@ void hgb_compose_destroy(hgb_composed_graph_t* comp) {
     free(comp->child_nodes);
     comp->child_nodes = nullptr;
     comp->num_children = 0;
+    comp->last_stream = nullptr;
     comp->device_id = -1;
 
     pthread_mutex_unlock(&comp->lock);

@@ -1,0 +1,23 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "release",
+      "displayName": "Release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_PREFIX_PATH": "/opt/rocm",
+        "CMAKE_HIP_ARCHITECTURES": "gfx1030",
+        "BUILD_TESTS": "ON",
+        "BUILD_BENCHMARKS": "ON"
+      }
+    }
+  ]
+}

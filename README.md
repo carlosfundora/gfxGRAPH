@@ -2,7 +2,7 @@
   <img src="docs/assets/gfxgraph-logo.png" alt="gfxGRAPH logo" width="400" />
 </p>
 
-# gfxGRAPH v0.3.0
+# gfxGRAPH v0.3.1
 
 Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2).
 
@@ -46,10 +46,10 @@ pip install torch --index-url https://download.pytorch.org/whl/rocm6.2  # or you
 
 **Install gfxGRAPH:**
 ```bash
-# From source (editable)
-pip install -e /path/to/gfxGRAPH/python/
+# Preferred source install from repo root
+pip install /path/to/gfxGRAPH
 
-# Or standard install
+# Transitional compatibility path
 pip install /path/to/gfxGRAPH/python/
 ```
 
@@ -94,19 +94,27 @@ sudo apt-get install -y cmake ninja-build
 ```bash
 cd /path/to/gfxGRAPH
 
-cmake -B build -GNinja \
-    -DCMAKE_HIP_COMPILER=/opt/rocm/bin/hipcc \
-    -DCMAKE_PREFIX_PATH=/opt/rocm \
-    -DCMAKE_HIP_ARCHITECTURES=gfx1030
-
+cmake --preset release
 cmake --build build -j$(nproc)
 
 # Run tests
 ctest --test-dir build --output-on-failure
 ```
 
-The built `libhipgraph_bridge.so` will be in `build/`. gfxGRAPH auto-discovers it
-via the build directory, `LD_LIBRARY_PATH`, or you can set `GFXGRAPH_LIB=/path/to/libhipgraph_bridge.so`.
+**Or install the native companion package:**
+```bash
+pip install /path/to/gfxGRAPH
+pip install /path/to/gfxGRAPH/native
+```
+
+`pip install .[native]` is intentionally **not** the supported source-install path
+in this batch. Tier 2 stays a two-step flow so plain `pip install /path/to/gfxGRAPH`
+remains a true pure-Python install.
+
+gfxGRAPH checks `GFXGRAPH_LIB` first, then the canonical packaged resolver
+`gfxgraph._native.library_path()`, then local `build/` outputs, and finally
+standard loader paths. During this phase the companion package still owns the
+actual `.so`, but runtime code treats `gfxgraph._native` as the canonical lookup.
 
 **Verify native bridge loaded:**
 ```bash
@@ -160,7 +168,7 @@ python3 -m sglang.launch_server --model-path <model> ...
 
 SGLang logs gfxGRAPH status at startup:
 ```
-INFO: gfxGRAPH v0.3.0 enabled (mode=normal, vram_cap=0.90)
+INFO: gfxGRAPH v0.3.1 enabled (mode=normal, vram_cap=0.90)
 INFO: gfxGRAPH health check passed: AMD Radeon RX 6700 XT (gfx1030), VRAM 10240MB free / 12288MB total
 ```
 

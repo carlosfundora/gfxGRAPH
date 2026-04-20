@@ -17,7 +17,7 @@ static hipDeviceProp_t  g_dev_props;
 static int              g_device_id = -1;
 static int              g_rocm_runtime_version = 0;
 
-void hgb_log(const char* fmt, ...) {
+extern "C" void hgb_log(const char* fmt, ...) {
     if (!g_debug.load(std::memory_order_relaxed)) return;
     va_list args;
     va_start(args, fmt);
@@ -27,11 +27,11 @@ void hgb_log(const char* fmt, ...) {
     va_end(args);
 }
 
-int hgb_is_initialized(void) {
+extern "C" HGB_EXPORT int hgb_is_initialized(void) {
     return g_initialized.load(std::memory_order_acquire);
 }
 
-hgb_version_t hgb_get_version(void) {
+extern "C" HGB_EXPORT hgb_version_t hgb_get_version(void) {
     hgb_version_t v;
     v.major = HGB_VERSION_MAJOR;
     v.minor = HGB_VERSION_MINOR;
@@ -50,7 +50,7 @@ hgb_version_t hgb_get_version(void) {
     return v;
 }
 
-hipError_t hgb_validate_gfx1030(void) {
+extern "C" HGB_EXPORT hipError_t hgb_validate_gfx1030(void) {
     int dev;
     hipError_t err = hipGetDevice(&dev);
     if (err != hipSuccess) return err;
@@ -106,7 +106,7 @@ static hipError_t hgb_init_impl(void) {
     return hipSuccess;
 }
 
-hipError_t hgb_init(void) {
+extern "C" HGB_EXPORT hipError_t hgb_init(void) {
     if (g_initialized.load(std::memory_order_acquire)) return hipSuccess;
 
     std::lock_guard<std::mutex> lock(g_init_mutex);
@@ -117,7 +117,7 @@ hipError_t hgb_init(void) {
     return hgb_init_impl();
 }
 
-void hgb_shutdown(void) {
+extern "C" HGB_EXPORT void hgb_shutdown(void) {
     std::lock_guard<std::mutex> lock(g_init_mutex);
 
     if (!g_initialized.load(std::memory_order_acquire)) return;
@@ -126,6 +126,6 @@ void hgb_shutdown(void) {
     g_device_id = -1;
 }
 
-void hgb_set_debug(int enabled) {
+extern "C" HGB_EXPORT void hgb_set_debug(int enabled) {
     g_debug.store(enabled, std::memory_order_relaxed);
 }

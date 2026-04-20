@@ -16,5 +16,5 @@ dependencies = ["torch>=2.9"]
 gfxgraph = "gfxgraph.__main__:main"
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["python"]
 include = ["gfxgraph*", "hipgraph_bridge*"]

@@ -107,7 +107,7 @@ def enable(*, debug: bool = False, validate: bool = False) -> None:
         _log.setLevel(logging.DEBUG)
         os.environ["HGB_DEBUG"] = "1"
 
-    _log.info("Enabling gfxGRAPH v0.3.0 for gfx1030/RDNA2")
+    _log.info("Enabling gfxGRAPH v0.3.1 for gfx1030/RDNA2")
 
     # Try to init native bridge (non-fatal if .so not built)
     _init_native(debug)
@@ -259,7 +259,7 @@ def _init_native(debug: bool) -> None:
             _log.info(
                 "Native bridge not available (libhipgraph_bridge.so not found). "
                 "Running in pure-Python mode. To build: cd gfxGRAPH && "
-                "mkdir build && cd build && cmake .. && make"
+                "cmake --preset release && cmake --build build -j$(nproc)"
             )
     except Exception as e:
         _log.info("Native bridge load failed: %s. Pure-Python mode.", e)
