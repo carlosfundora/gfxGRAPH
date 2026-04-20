@@ -6,8 +6,28 @@
 
 Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2).
 
-Bridges all 4 CUDA Graph parity gaps on ROCm, enabling transparent
+gfxGRAPH bridges all 4 CUDA Graph parity gaps on ROCm, enabling transparent
 graph capture/replay with eager fallback, VRAM safety, and validation.
+
+## At a Glance
+
+- **Tier 1**: pure-Python integration with monkey-patched `torch.cuda.CUDAGraph`
+- **Tier 2**: native bridge for conditional nodes, rapid launch, and nested capture gaps
+- **Target**: AMD Radeon RX 6700 XT / 6800 / 6900 class GPUs on ROCm
+- **Focus**: transparent integration, safe fallback behavior, and practical performance on RDNA2
+
+## Table of Contents
+
+- [Target Hardware](#target-hardware)
+- [Quick Start](#quick-start)
+- [Two Operating Tiers](#two-operating-tiers)
+- [Usage](#usage)
+- [Architecture](#architecture)
+- [Observability](#observability)
+- [Troubleshooting](#troubleshooting)
+- [Performance](#performance-sglang--gemlite-awq-7b-bs1-gfx1030)
+- [Documentation](#documentation)
+- [License](#license)
 
 ## Target Hardware
 
@@ -18,15 +38,57 @@ graph capture/replay with eager fallback, VRAM safety, and validation.
 | **PyTorch** | 2.9+ (ROCm build) |
 | **Python** | 3.10+ |
 
+## Quick Start
+
+If you just want gfxGRAPH working with the fewest moving parts, start with Tier 1.
+
+### Fastest Path: Tier 1
+
+```bash
+# Install PyTorch ROCm build
+pip install torch --index-url https://download.pytorch.org/whl/rocm6.2  # or your ROCm version
+
+# Install gfxGRAPH from repo root
+pip install /path/to/gfxGRAPH
+
+# Verify
+python3 -c "import gfxgraph; print(gfxgraph.__version__); print(gfxgraph.health_check())"
+```
+
+Expected result:
+- `native_bridge: False`
+- This is normal in Tier 1
+- All Python-level features still work
+
+### Native Path: Tier 2
+
+```bash
+pip install /path/to/gfxGRAPH
+pip install /path/to/gfxGRAPH/native
+
+python3 -c "import gfxgraph; print(gfxgraph.health_check())"
+```
+
+Expected result:
+- `native_bridge: True`
+
 ---
 
 ## Two Operating Tiers
 
 gfxGRAPH works in **two tiers** depending on which dependencies you install.
-**Most users only need Tier 1** — it provides the full Python-level integration
-including the monkey-patch that makes CUDA graphs work transparently on RDNA2.
+**Most users only need Tier 1** because it provides the full Python-level
+integration, including the monkey-patch that makes CUDA graphs work
+transparently on RDNA2.
 
-### Tier 1: Python-Only Mode (recommended starting point)
+### Tier Comparison
+
+| Tier | Install Style | What You Get | Best For |
+|------|---------------|--------------|----------|
+| **Tier 1** | Pure Python | Monkey-patch, eager fallback, shape bucketing, validation, stats, health checks | Most users getting started |
+| **Tier 2** | Python + native companion | Native HIP Graph gap bridges and full parity path | Users who need the native-only gaps |
+
+### Tier 1: Python-Only Mode
 
 **What you get:**
 - `torch.cuda.CUDAGraph → BridgedCUDAGraph` monkey-patch (transparent to callers)
@@ -61,7 +123,9 @@ python3 -c "import gfxgraph; print(gfxgraph.__version__); print(gfxgraph.health_
 You'll see `native_bridge: False` — that's expected and fine. All Python-level
 features work without the native library.
 
-### Tier 2: Full Native Mode (advanced — requires ROCm SDK)
+### Tier 2: Full Native Mode
+
+This is the advanced path and requires the ROCm SDK.
 
 **What you get additionally:**
 - C-level HIP Graph gap bridges (conditional nodes, device-side launch, nested capture)
@@ -90,7 +154,8 @@ sudo apt-get install -y cmake ninja-build
 > have `libamdhip64.so` — but you still need `hip-dev` headers and `hipcc` for
 > compiling the bridge.
 
-**Build the native bridge:**
+#### Option A: Build the Native Bridge Locally
+
 ```bash
 cd /path/to/gfxGRAPH
 
@@ -101,7 +166,8 @@ cmake --build build -j$(nproc)
 ctest --test-dir build --output-on-failure
 ```
 
-**Or install the native companion package:**
+#### Option B: Install the Native Companion Package
+
 ```bash
 pip install /path/to/gfxGRAPH
 pip install /path/to/gfxGRAPH/native
@@ -248,21 +314,25 @@ gfxgraph.is_enabled()  # → True
 ## Troubleshooting
 
 ### "Native bridge not available" message at startup
+
 **Expected in Tier 1.** gfxGRAPH runs in pure-Python mode — all key features work.
 Build `libhipgraph_bridge.so` (see Tier 2 above) only if you need the 2 extra native-only gaps.
 
 ### Health check returns `ok: False`
+
 - Verify ROCm is working: `rocminfo | grep gfx`
 - Check HSA override: `echo $HSA_OVERRIDE_GFX_VERSION` (should be `10.3.0` for gfx1031)
 - Test PyTorch: `python3 -c "import torch; print(torch.cuda.is_available())"`
 - Check for PyTorch #155684 (HIP Graph correctness bug) — use `GFXGRAPH=validate`
 
 ### CUDA graphs fail during SGLang model loading
+
 - Set `AMD_SERIALIZE_KERNEL=3` and `AMD_SERIALIZE_COPY=3` (SGLang sets these automatically)
 - Reduce `GFXGRAPH_VRAM_CAP` if running near VRAM limits
 - Try `SGLANG_DISABLE_GFXGRAPH=1` to isolate whether gfxGRAPH is the issue
 
 ### Fallback count keeps increasing
+
 - Some graph shapes may genuinely fail on HIP — eager fallback is intentional
 - Check `HGB_LOG_LEVEL=debug` for detailed failure reasons
 - If all captures fail, the underlying HIP Graph support may be broken
