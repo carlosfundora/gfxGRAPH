@@ -2,12 +2,10 @@
   <img src="docs/assets/gfxgraph-logo.png" alt="gfxGRAPH logo" width="400" />
 </p>
 
-# gfxGRAPH v0.3.1
-
-Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2).
-
-gfxGRAPH bridges all 4 CUDA Graph parity gaps on ROCm, enabling transparent
+Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2). gfxGRAPH bridges all 4 CUDA Graph parity gaps on ROCm, enabling transparent
 graph capture/replay with eager fallback, VRAM safety, and validation.
+
+# gfxGRAPH v0.3.1
 
 ## At a Glance
 
