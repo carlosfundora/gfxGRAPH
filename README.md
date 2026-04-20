@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/gfxgraph-logo.png" alt="gfxGRAPH logo" width="400" />
+</p>
+
 # gfxGRAPH v0.3.0
 
 Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2).
