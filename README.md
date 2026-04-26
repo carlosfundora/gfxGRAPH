@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/gfxgraph-logo.png" alt="gfxGRAPH logo" width="500" />
+  <img src="docs/assets/gfxgraph-logo.png" alt="gfxGRAPH logo" width="600" />
 </p>
 
 # gfxGRAPH v0.3.1
