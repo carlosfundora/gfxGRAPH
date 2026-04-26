@@ -56,10 +56,11 @@ class ShapeBucketPool:
         self.model_fn = model_fn
         self.buckets = sorted(buckets or [1, 2, 4, 8, 16, 32, 64])
         self._graphs = {}      # bucket_size → CUDAGraph
-        self._static_inputs = {}   # bucket_size → static input tensor
+        self._max_static_input = None
         self._static_outputs = {}  # bucket_size → static output tensor
         self._warmed_up = set()
         self._failed_buckets = set()  # buckets that failed capture
+        self._mempool = torch.cuda.graph_pool_handle()
 
         if warmup and model_fn is not None:
             self._warmup_all()
@@ -83,7 +84,7 @@ class ShapeBucketPool:
             return False
         return True
 
-    def _capture_bucket(self, bucket_size: int) -> bool:
+    def _capture_bucket(self, bucket_size: int, example_input=None) -> bool:
         """Capture a CUDAGraph for the given bucket size. Returns True on success."""
         if bucket_size in self._warmed_up:
             return True
@@ -97,9 +98,18 @@ class ShapeBucketPool:
         device = torch.device("cuda")
 
         try:
-            # Allocate static input
-            static_input = torch.zeros(bucket_size, device=device)
-            self._static_inputs[bucket_size] = static_input
+            # Check if we need to initialize or resize the shared max static input
+            max_bucket = self.buckets[-1]
+            if self._max_static_input is None:
+                if example_input is not None and isinstance(example_input, torch.Tensor):
+                    shape = list(example_input.shape)
+                    shape[0] = max_bucket
+                    self._max_static_input = torch.zeros(shape, dtype=example_input.dtype, device=device)
+                else:
+                    self._max_static_input = torch.zeros(max_bucket, device=device)
+
+            # Use a slice of the max static input for this bucket's capture
+            static_input = self._max_static_input[:bucket_size]
 
             # Warmup run (required before capture)
             torch.cuda.synchronize()
@@ -109,7 +119,7 @@ class ShapeBucketPool:
 
             # Capture
             graph = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(graph):
+            with torch.cuda.graph(graph, pool=self._mempool):
                 static_output = self.model_fn(static_input)
 
             self._graphs[bucket_size] = graph
@@ -125,7 +135,6 @@ class ShapeBucketPool:
             )
             self._failed_buckets.add(bucket_size)
             # Clean up partial state
-            self._static_inputs.pop(bucket_size, None)
             self._static_outputs.pop(bucket_size, None)
             self._graphs.pop(bucket_size, None)
             return False
@@ -164,7 +173,7 @@ class ShapeBucketPool:
 
         # Lazy capture if not warmed up
         if bucket not in self._warmed_up:
-            if not self._capture_bucket(bucket):
+            if not self._capture_bucket(bucket, input_tensor):
                 # Capture failed or VRAM exceeded — eager fallback
                 return self._eager_fallback(input_tensor, input_size)
 
@@ -173,7 +182,7 @@ class ShapeBucketPool:
 
         # Copy input to static buffer (only input_size elements)
         if input_tensor is not None:
-            static_in = self._static_inputs[bucket]
+            static_in = self._max_static_input[:bucket]
             static_in[:input_size].copy_(input_tensor[:input_size])
             if input_size < bucket:
                 static_in[input_size:].zero_()  # Zero-pad
@@ -209,10 +218,15 @@ class ShapeBucketPool:
     def memory_overhead(self) -> int:
         """Total GPU memory used by all bucket graphs (bytes)."""
         total = 0
-        for size, inp in self._static_inputs.items():
-            total += inp.nelement() * inp.element_size()
-        for size, out in self._static_outputs.items():
-            total += out.nelement() * out.element_size()
+        if self._max_static_input is not None:
+            total += self._max_static_input.nelement() * self._max_static_input.element_size()
+        # With CUDA graph pools, output memory is reused across buckets.
+        # We approximate it by taking the max size.
+        max_out = 0
+        for out in self._static_outputs.values():
+            sz = out.nelement() * out.element_size()
+            if sz > max_out: max_out = sz
+        total += max_out
         return total
 
     @property

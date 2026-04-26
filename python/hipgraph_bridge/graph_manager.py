@@ -96,7 +96,7 @@ class BridgedCUDAGraph:
             if self.dynamic_shapes and self.buckets:
                 # Gap 53: Use shape bucketing — capture deferred to first replay
                 self.parent._shape_pool = ShapeBucketPool(
-                    model_fn=None,  # Set during capture
+                    model_fn=self.parent._model_fn,
                     buckets=self.buckets
                 )
                 _bump_capture()
