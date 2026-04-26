@@ -109,6 +109,11 @@ class BridgedCUDAGraph:
                 self.parent._graph.capture_begin()
             except Exception as e:
                 _log.warning("Graph capture_begin failed: %s — using eager fallback", e)
+                # Sync before dropping reference to avoid C++ destructor crash
+                try:
+                    torch.cuda.synchronize()
+                except Exception:
+                    pass
                 self.parent._graph = None
                 self.parent._eager_fallback = True
                 _bump_fallback()
@@ -116,11 +121,38 @@ class BridgedCUDAGraph:
 
         def __exit__(self, exc_type, exc_val, exc_tb):
             if exc_type is not None:
-                # Exception during captured region — fall back to eager
-                _log.warning("Exception during graph capture: %s — using eager fallback", exc_val)
+                # Exception during captured region — fall back to eager.
+                # CRITICAL: We must end the stream capture BEFORE dropping
+                # the graph reference, otherwise the C++ destructor of
+                # _OriginalCUDAGraph calls hipStreamEndCapture on a stream
+                # still in capture mode and throws a C++ exception that
+                # bypasses Python's try/except → terminate() → SIGABRT.
+                _log.warning(
+                    "[gfxgRAPH] Exception during graph capture: %s "
+                    "— cleaning up HIP state and using eager fallback",
+                    exc_val,
+                )
+                graph = self.parent._graph
+                if graph is not None:
+                    # Try to properly end the capture so HIP state is clean
+                    try:
+                        graph.capture_end()
+                    except Exception:
+                        pass  # already broken, just need the state reset
+                    # Synchronize to flush any pending HIP errors before
+                    # the C++ destructor runs
+                    try:
+                        torch.cuda.synchronize()
+                    except Exception:
+                        pass
                 self.parent._graph = None
                 self.parent._eager_fallback = True
                 _bump_fallback()
+                # Final sync to ensure no async HIP errors linger
+                try:
+                    torch.cuda.synchronize()
+                except Exception:
+                    pass
                 return True  # suppress the exception
 
             if self.parent._graph is not None:
@@ -129,6 +161,11 @@ class BridgedCUDAGraph:
                     _bump_capture()
                 except Exception as e:
                     _log.warning("capture_end failed: %s — using eager fallback", e)
+                    # Same cleanup: end capture, sync, then drop reference
+                    try:
+                        torch.cuda.synchronize()
+                    except Exception:
+                        pass
                     self.parent._graph = None
                     self.parent._eager_fallback = True
                     _bump_fallback()

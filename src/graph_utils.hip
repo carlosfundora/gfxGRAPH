@@ -5,7 +5,7 @@
 #include "hipgraph_bridge.h"
 #include <cstdlib>
 
-extern void hgb_log(const char* fmt, ...);
+extern "C" void hgb_log(const char* fmt, ...);
 
 hipError_t hgb_find_kernel_nodes(
     hipGraph_t       graph,

@@ -17,11 +17,21 @@
 extern "C" {
 #endif
 
+#if defined(_WIN32)
+#  if defined(HGB_BUILD_SHARED)
+#    define HGB_EXPORT __declspec(dllexport)
+#  else
+#    define HGB_EXPORT __declspec(dllimport)
+#  endif
+#else
+#  define HGB_EXPORT __attribute__((visibility("default")))
+#endif
+
 /* ── Version & Lifecycle ────────────────────────────── */
 
 #define HGB_VERSION_MAJOR 0
-#define HGB_VERSION_MINOR 2
-#define HGB_VERSION_PATCH 0
+#define HGB_VERSION_MINOR 3
+#define HGB_VERSION_PATCH 1
 
 #define HGB_MAX_BRANCHES 32
 #define HGB_MAX_BUCKETS  64
@@ -34,19 +44,19 @@ typedef struct {
     const char* rocm_version;
 } hgb_version_t;
 
-hgb_version_t hgb_get_version(void);
+HGB_EXPORT hgb_version_t hgb_get_version(void);
 
 /**
  * Initialize the bridge. Call once before any other hgb_* function.
  * Validates gfx1030 target and caches device properties.
  */
-hipError_t hgb_init(void);
+HGB_EXPORT hipError_t hgb_init(void);
 
 /** Release all cached resources. Safe to call multiple times. */
-void hgb_shutdown(void);
+HGB_EXPORT void hgb_shutdown(void);
 
 /** Check if bridge is initialized. Returns 1 if init'd, 0 otherwise. */
-int hgb_is_initialized(void);
+HGB_EXPORT int hgb_is_initialized(void);
 
 /* ── Gap 51: Conditional Execution ──────────────────── */
 
@@ -66,7 +76,7 @@ typedef struct {
  * @param out      Populated conditional handle
  * @return hipSuccess or error code
  */
-hipError_t hgb_conditional_create(
+HGB_EXPORT hipError_t hgb_conditional_create(
     hipGraph_t*         graphs,
     int                 count,
     hgb_conditional_t*  out
@@ -75,7 +85,7 @@ hipError_t hgb_conditional_create(
 /**
  * Select a branch by index and launch on the given stream.
  */
-hipError_t hgb_conditional_launch(
+HGB_EXPORT hipError_t hgb_conditional_launch(
     hgb_conditional_t*  cond,
     int                 branch_index,
     hipStream_t         stream
@@ -85,13 +95,13 @@ hipError_t hgb_conditional_launch(
  * Select branch from device-side flag (requires host sync).
  * Reads *d_flag, uses as branch index.
  */
-hipError_t hgb_conditional_launch_by_flag(
+HGB_EXPORT hipError_t hgb_conditional_launch_by_flag(
     hgb_conditional_t*  cond,
     int*                d_flag,
     hipStream_t         stream
 );
 
-void hgb_conditional_destroy(hgb_conditional_t* cond);
+HGB_EXPORT void hgb_conditional_destroy(hgb_conditional_t* cond);
 
 /* ── Gap 52: Rapid Graph Launch Pipeline ────────────── */
 
@@ -116,22 +126,22 @@ typedef struct {
  * Create a double-buffered graph launch pipeline.
  * Pre-uploads graph to GPU for ~44μs launch latency.
  */
-hipError_t hgb_pipeline_create(
+HGB_EXPORT hipError_t hgb_pipeline_create(
     hipGraph_t       graph,
     hgb_pipeline_t*  out
 );
 
 /** Launch active graph and swap buffers. */
-hipError_t hgb_pipeline_launch(hgb_pipeline_t* pipe);
+HGB_EXPORT hipError_t hgb_pipeline_launch(hgb_pipeline_t* pipe);
 
 /** Update kernel params on inactive buffer (live on next launch). */
-hipError_t hgb_pipeline_update_kernel(
+HGB_EXPORT hipError_t hgb_pipeline_update_kernel(
     hgb_pipeline_t*       pipe,
     hipGraphNode_t        node,
     hipKernelNodeParams*  params
 );
 
-void hgb_pipeline_destroy(hgb_pipeline_t* pipe);
+HGB_EXPORT void hgb_pipeline_destroy(hgb_pipeline_t* pipe);
 
 /* ── Gap 53: Dynamic Shape Management ───────────────── */
 
@@ -157,7 +167,7 @@ typedef struct {
  * @param num_buckets Length of buckets array
  * @param out         Populated shape pool
  */
-hipError_t hgb_shape_pool_create(
+HGB_EXPORT hipError_t hgb_shape_pool_create(
     hgb_capture_fn    graph_fn,
     void*             ctx,
     const int*        buckets,
@@ -169,7 +179,7 @@ hipError_t hgb_shape_pool_create(
  * Launch graph for the given input size.
  * Selects smallest bucket >= size. Returns actual bucket used.
  */
-hipError_t hgb_shape_pool_launch(
+HGB_EXPORT hipError_t hgb_shape_pool_launch(
     hgb_shape_pool_t* pool,
     int               input_size,
     hipStream_t       stream,
@@ -177,14 +187,14 @@ hipError_t hgb_shape_pool_launch(
 );
 
 /** Update kernel params in-place for a specific bucket (no re-instantiate). */
-hipError_t hgb_shape_pool_update_params(
+HGB_EXPORT hipError_t hgb_shape_pool_update_params(
     hgb_shape_pool_t*     pool,
     int                   bucket_index,
     hipGraphNode_t        node,
     hipKernelNodeParams*  params
 );
 
-void hgb_shape_pool_destroy(hgb_shape_pool_t* pool);
+HGB_EXPORT void hgb_shape_pool_destroy(hgb_shape_pool_t* pool);
 
 /* ── Gap 54: Capture Compositor ─────────────────────── */
 
@@ -194,6 +204,7 @@ typedef struct {
     hipGraphNode_t* child_nodes;
     int             num_children;
     hipStream_t     last_stream;  /**< Last stream used for launch (for sync-before-update) */
+    hipEvent_t      last_event;   /**< Event recorded on the last launch when tracking is available */
     int             device_id;
     pthread_mutex_t lock;
 } hgb_composed_graph_t;
@@ -206,7 +217,7 @@ typedef struct {
  * @param deps        Dependency array: deps[i] = parent index, -1 = root
  * @param out         Populated composed graph
  */
-hipError_t hgb_compose_graphs(
+HGB_EXPORT hipError_t hgb_compose_graphs(
     hipGraph_t*           sub_graphs,
     int                   count,
     const int*            deps,
@@ -214,26 +225,26 @@ hipError_t hgb_compose_graphs(
 );
 
 /** Update a child sub-graph without re-instantiation. */
-hipError_t hgb_compose_update_child(
+HGB_EXPORT hipError_t hgb_compose_update_child(
     hgb_composed_graph_t* comp,
     int                   child_index,
     hipGraph_t            new_sub_graph
 );
 
-hipError_t hgb_compose_launch(
+HGB_EXPORT hipError_t hgb_compose_launch(
     hgb_composed_graph_t* comp,
     hipStream_t           stream
 );
 
-void hgb_compose_destroy(hgb_composed_graph_t* comp);
+HGB_EXPORT void hgb_compose_destroy(hgb_composed_graph_t* comp);
 
 /* ── Utilities ──────────────────────────────────────── */
 
 /** Check if running on gfx1030. Returns hipSuccess or hipErrorInvalidDevice. */
-hipError_t hgb_validate_gfx1030(void);
+HGB_EXPORT hipError_t hgb_validate_gfx1030(void);
 
 /** Enable debug logging (also via env HGB_DEBUG=1). */
-void hgb_set_debug(int enabled);
+HGB_EXPORT void hgb_set_debug(int enabled);
 
 #ifdef __cplusplus
 }

@@ -107,8 +107,8 @@ implement the 4 gap capabilities using verified workarounds.
 
 ```
 libhipgraph_bridge.so
-  Compiler:  hipcc --offload-arch=gfx1030
-  Link:      -lamdhip64 -lhiprtc
+  Compiler:  CMake-selected ROCm Clang (HIP)
+  Link:      -lamdhip64
   Standard:  C++17 / HIP
   Size est:  ~200–400 KB
 ```
@@ -684,10 +684,12 @@ ai/build/src/hipgraph-bridge/
 
 ```cmake
 cmake_minimum_required(VERSION 3.21)
-project(hipgraph_bridge LANGUAGES CXX HIP)
+project(gfxGRAPH VERSION 0.3.1 LANGUAGES CXX HIP)
 
+include(CheckIPOSupported)
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_HIP_ARCHITECTURES gfx1030)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_HIP_ARCHITECTURES "gfx1030" CACHE STRING "HIP architectures to build for")
 
 # ── Layer 1: Core bridge library ────────────────────
 add_library(hipgraph_bridge SHARED
@@ -698,16 +700,34 @@ add_library(hipgraph_bridge SHARED
     src/capture_compositor.hip
     src/graph_utils.hip
 )
-target_include_directories(hipgraph_bridge PUBLIC include/)
+target_include_directories(hipgraph_bridge
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
 target_link_libraries(hipgraph_bridge PRIVATE
     hip::amdhip64
-    hip::hiprtc
+)
+target_compile_options(hipgraph_bridge PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX,HIP>:-O3>
+    $<$<COMPILE_LANGUAGE:CXX,HIP>:-fvisibility=hidden>
+)
+target_compile_definitions(hipgraph_bridge PRIVATE
+    HGB_BUILD_SHARED=1
+    NDEBUG
+    __HIP_PLATFORM_AMD__=1
 )
 set_target_properties(hipgraph_bridge PROPERTIES
-    VERSION 0.1.0
+    VERSION ${PROJECT_VERSION}
     SOVERSION 0
     OUTPUT_NAME hipgraph_bridge
 )
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    check_ipo_supported(RESULT HGB_IPO_SUPPORTED OUTPUT HGB_IPO_ERROR)
+endif()
+if(HGB_IPO_SUPPORTED)
+    set_property(TARGET hipgraph_bridge PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
 
 # ── Layer 3: CUDA compat shim (optional) ────────────
 option(BUILD_CUDA_COMPAT "Build CUDA compatibility shim" OFF)
@@ -722,6 +742,7 @@ if(BUILD_CUDA_COMPAT)
 endif()
 
 # ── Tests ───────────────────────────────────────────
+option(BUILD_TESTS "Build test executables" ON)
 enable_testing()
 add_executable(test_conditional tests/test_conditional.hip)
 add_executable(test_pipeline    tests/test_pipeline.hip)
@@ -731,6 +752,11 @@ foreach(test IN ITEMS conditional pipeline shapes compositor)
     target_link_libraries(test_${test} PRIVATE hipgraph_bridge)
     add_test(NAME ${test} COMMAND test_${test})
 endforeach()
+
+# ── Benchmarks ──────────────────────────────────────
+option(BUILD_BENCHMARKS "Build benchmark executables" ON)
+add_executable(benchmark_pipeline benchmarks/benchmark_pipeline.hip)
+target_link_libraries(benchmark_pipeline PRIVATE hipgraph_bridge)
 ```
 
 ### Build Commands
@@ -738,30 +764,35 @@ endforeach()
 ```bash
 cd ai/build/src/hipgraph-bridge
 
-# Configure
-cmake -B build -GNinja \
-    -DCMAKE_HIP_COMPILER=/opt/rocm/bin/hipcc \
-    -DCMAKE_PREFIX_PATH=/opt/rocm \
-    -DCMAKE_HIP_ARCHITECTURES=gfx1030
+# Configure + build using the checked-in preset
+cmake --preset release
 
-# Build
 cmake --build build -j$(nproc)
 
 # Test
-cd build && ctest --output-on-failure
+ctest --test-dir build --output-on-failure
 
-# Install (optional)
-cmake --install build --prefix /opt/rocm/lib/hipgraph_bridge
+# Benchmark (informational, not a perf gate)
+./build/benchmark_pipeline
 
 # Build with CUDA compat layer
-cmake -B build -GNinja -DBUILD_CUDA_COMPAT=ON ...
+cmake -S . -B build-compat -GNinja -DBUILD_CUDA_COMPAT=ON
+cmake --build build-compat -j$(nproc)
 ```
 
 ### Python Install
 
 ```bash
 cd ai/build/src/hipgraph-bridge
-pip install -e python/   # or: uv pip install -e python/ --no-deps
+
+# Preferred pure-Python install from repo root
+pip install .
+
+# Optional native companion package
+pip install ./native
+
+# Transitional compatibility path
+pip install ./python
 ```
 
 ---
@@ -772,12 +803,12 @@ pip install -e python/   # or: uv pip install -e python/ --no-deps
 |------|:---:|------------------|---------------|
 | `test_conditional` | 51 | 2-branch if/else supergraph | Correct branch selected, output matches |
 | `test_conditional_flag` | 51 | Device-side flag dispatch | Flag=0 → branch A, flag=1 → branch B |
-| `test_pipeline_latency` | 52 | Launch latency ≤ 50μs | Mean < 50μs over 1000 iterations |
+| `benchmark_pipeline` | 52 | Informational launch-latency benchmark | Reports average μs/launch over 10000 iterations |
 | `test_pipeline_double` | 52 | Double-buffer correctness | Output matches sequential execution |
 | `test_shape_buckets` | 53 | Bucket selection + padding | All sizes 1–64 produce correct output |
 | `test_shape_update` | 53 | In-place param update | gridDim changes without re-instantiate |
 | `test_compose_linear` | 54 | Linear sub-graph chain | A→B→C composition matches sequential |
-| `test_compose_update` | 54 | Child graph hot-swap | Updated child produces new output |
+| `test_compose_update` | 54 | Child graph hot-swap | Updated child produces new output, including in-flight update fallback |
 | `test_torch_bridged` | all | BridgedCUDAGraph end-to-end | PyTorch model runs with all bridges |
 | `test_compile_backend` | all | torch.compile integration | Compiled model produces correct output |
 | `test_compat_shim` | all | LD_PRELOAD interception | CUDA calls route to HIP correctly |

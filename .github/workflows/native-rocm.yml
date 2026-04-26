@@ -1,0 +1,75 @@
+name: Native ROCm CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  native-rocm:
+    runs-on: [self-hosted, linux, amd-gpu]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Add ROCm tools to PATH
+        run: echo "/opt/rocm/bin" >> "$GITHUB_PATH"
+
+      - name: Configure release build
+        run: cmake --preset release
+
+      - name: Build native targets
+        run: cmake --build build -j"$(nproc)"
+
+      - name: Run native tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Run pipeline benchmark
+        run: ./build/benchmark_pipeline
+
+      - name: Packaging smoke - root install
+        run: |
+          python -m venv --system-site-packages /tmp/gfxgraph-root
+          /tmp/gfxgraph-root/bin/pip install --upgrade pip
+          /tmp/gfxgraph-root/bin/pip install --no-deps .
+          /tmp/gfxgraph-root/bin/python - <<'PY'
+          import gfxgraph
+          from gfxgraph._native import library_path
+          health = gfxgraph.health_check()
+          print(library_path())
+          print(health)
+          assert library_path() is None
+          assert health["native_bridge"] is False
+          PY
+
+      - name: Packaging smoke - python compatibility install
+        run: |
+          python -m venv --system-site-packages /tmp/gfxgraph-python
+          /tmp/gfxgraph-python/bin/pip install --upgrade pip
+          /tmp/gfxgraph-python/bin/pip install --no-deps ./python
+          /tmp/gfxgraph-python/bin/python - <<'PY'
+          import gfxgraph
+          print(gfxgraph.__version__)
+          PY
+
+      - name: Packaging smoke - native companion install
+        run: |
+          python -m venv --system-site-packages /tmp/gfxgraph-native
+          /tmp/gfxgraph-native/bin/pip install --upgrade pip
+          /tmp/gfxgraph-native/bin/pip install --no-deps .
+          /tmp/gfxgraph-native/bin/pip install --no-deps ./native
+          /tmp/gfxgraph-native/bin/python - <<'PY'
+          import gfxgraph
+          from gfxgraph._native import library_path
+          health = gfxgraph.health_check()
+          resolved = library_path()
+          print(resolved)
+          print(health)
+          assert resolved is not None
+          assert "gfxgraph_native/_native/libhipgraph_bridge.so" in str(resolved)
+          assert health["native_bridge"] is True
+          PY

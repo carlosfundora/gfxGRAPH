@@ -15,14 +15,30 @@
 #include <cstdlib>
 #include <cstring>
 
-extern void hgb_log(const char* fmt, ...);
-extern int hgb_is_initialized(void);
+extern "C" void hgb_log(const char* fmt, ...);
+extern "C" int hgb_is_initialized(void);
 
 struct MutexGuard {
     pthread_mutex_t* m;
     MutexGuard(pthread_mutex_t* mtx) : m(mtx) { pthread_mutex_lock(m); }
     ~MutexGuard() { pthread_mutex_unlock(m); }
 };
+
+static void destroy_event(hipEvent_t* event) {
+    if (event && *event) {
+        hipEventDestroy(*event);
+        *event = nullptr;
+    }
+}
+
+static hipError_t ensure_bucket_event(hgb_shape_pool_t* pool, int bucket_index) {
+    if (pool->events[bucket_index]) {
+        return hipSuccess;
+    }
+    return hipEventCreateWithFlags(
+        &pool->events[bucket_index], hipEventDisableTiming
+    );
+}
 
 hipError_t hgb_shape_pool_create(
     hgb_capture_fn    graph_fn,
@@ -93,7 +109,7 @@ hipError_t hgb_shape_pool_create(
             return err;
         }
 
-        err = hipEventCreate(&out->events[i]);
+        err = hipEventCreateWithFlags(&out->events[i], hipEventDisableTiming);
         if (err != hipSuccess) {
             hgb_log("Event create failed for bucket %d: %d", buckets[i], (int)err);
             hgb_shape_pool_destroy(out);
@@ -153,11 +169,17 @@ hipError_t hgb_shape_pool_launch(
     hipError_t err = hipGraphLaunch(pool->execs[best], stream);
     if (err != hipSuccess) return err;
 
+    err = ensure_bucket_event(pool, best);
+    if (err != hipSuccess) {
+        hgb_log("WARNING: event create for bucket %d failed: %d", best, (int)err);
+        return hipSuccess;
+    }
+
     /* Record event so update_params can sync before mutating this exec */
     err = hipEventRecord(pool->events[best], stream);
     if (err != hipSuccess) {
         hgb_log("WARNING: event record for bucket %d failed: %d", best, (int)err);
-        /* Non-fatal: update_params will fall back to device sync */
+        destroy_event(&pool->events[best]);
     }
 
     return hipSuccess;
@@ -187,10 +209,28 @@ hipError_t hgb_shape_pool_update_params(
 
     /* Sync any in-flight launch of this bucket before mutating its exec */
     if (pool->events && pool->events[bucket_index]) {
-        hipError_t sync_err = hipEventSynchronize(pool->events[bucket_index]);
+        hipError_t query_err = hipEventQuery(pool->events[bucket_index]);
+        if (query_err == hipErrorNotReady) {
+            hipError_t sync_err = hipEventSynchronize(pool->events[bucket_index]);
+            if (sync_err != hipSuccess) {
+                hgb_log("WARNING: event sync for bucket %d failed: %d",
+                        bucket_index, (int)sync_err);
+                return sync_err;
+            }
+        } else if (query_err != hipSuccess) {
+            hgb_log("WARNING: event query for bucket %d failed: %d",
+                    bucket_index, (int)query_err);
+            hipError_t sync_err = hipDeviceSynchronize();
+            if (sync_err != hipSuccess) {
+                return sync_err;
+            }
+        }
+    } else {
+        hgb_log("WARNING: event tracking unavailable for bucket %d, falling back to device sync",
+                bucket_index);
+        hipError_t sync_err = hipDeviceSynchronize();
         if (sync_err != hipSuccess) {
-            hgb_log("WARNING: event sync for bucket %d failed: %d",
-                    bucket_index, (int)sync_err);
+            return sync_err;
         }
     }
 
@@ -218,8 +258,8 @@ void hgb_shape_pool_destroy(hgb_shape_pool_t* pool) {
     }
 
     for (int i = 0; i < pool->num_buckets; i++) {
-        if (pool->events && pool->events[i])
-            hipEventDestroy(pool->events[i]);
+        if (pool->events)
+            destroy_event(&pool->events[i]);
         if (pool->execs && pool->execs[i])
             hipGraphExecDestroy(pool->execs[i]);
         if (pool->graphs && pool->graphs[i])

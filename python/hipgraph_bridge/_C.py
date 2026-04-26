@@ -11,6 +11,8 @@ import logging
 import os
 from pathlib import Path
 
+from gfxgraph._native import library_path as packaged_library_path
+
 _log = logging.getLogger("gfxgraph")
 _LIB_NAME = "libhipgraph_bridge.so"
 
@@ -25,19 +27,17 @@ def _find_lib():
             return str(p)
         _log.warning("GFXGRAPH_LIB=%s not found, searching defaults", explicit)
 
+    packaged = packaged_library_path()
+    if packaged is not None:
+        return str(packaged)
+
+    repo_root = Path(__file__).resolve().parents[2]
     search_paths = [
         # Build directory (development)
-        Path(__file__).parent.parent.parent / "build",
-        Path(__file__).parent.parent.parent / "build" / "lib",
-        # Installed location
-        Path("/opt/rocm/lib/hipgraph_bridge"),
-        Path("/usr/local/lib"),
+        repo_root / "build",
+        repo_root / "build" / "lib",
+        repo_root / "build" / "Release",
     ]
-
-    ld_path = os.environ.get("LD_LIBRARY_PATH", "")
-    for p in ld_path.split(":"):
-        if p:
-            search_paths.append(Path(p))
 
     for base in search_paths:
         candidate = base / _LIB_NAME
@@ -49,8 +49,9 @@ def _find_lib():
 
 
 try:
-    lib = ctypes.CDLL(_find_lib())
-    _log.debug("Loaded native bridge from %s", _find_lib())
+    _lib_path = _find_lib()
+    lib = ctypes.CDLL(_lib_path)
+    _log.debug("Loaded native bridge from %s", _lib_path)
 except OSError:
     lib = None  # Bridge .so not built yet — Python-only mode
 
@@ -66,7 +67,7 @@ if lib is not None:
     lib.hgb_shutdown.argtypes = []
 
     # hgb_set_debug → void
-    lib.hgb_set_debug.restype = ctypes.c_int
+    lib.hgb_set_debug.restype = None
     lib.hgb_set_debug.argtypes = [ctypes.c_int]
 
 

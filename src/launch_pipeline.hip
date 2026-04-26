@@ -19,8 +19,8 @@
 #include "hipgraph_bridge.h"
 #include <cstring>
 
-extern void hgb_log(const char* fmt, ...);
-extern int hgb_is_initialized(void);
+extern "C" void hgb_log(const char* fmt, ...);
+extern "C" int hgb_is_initialized(void);
 
 struct MutexGuard {
     pthread_mutex_t* m;
