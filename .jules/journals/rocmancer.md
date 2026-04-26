@@ -16,3 +16,13 @@ The codebase contains a great abstraction layer for bridging HIP capabilities, b
 
 **Next steps**:
 Look closer into `launch_pipeline.hip` for Gap 52 kernel launch latency when used with high-frequency tiny graph executions (like continuous small batch decode generation cycles).
+
+### Run: Optimize conditional graph branching memory allocations
+
+**What changed**:
+1. Following the identical principle from our shape bucketing VRAM optimization, `ConditionalGraph` (Gap 51) was updated to share intermediate memory.
+2. Initialized `_mempool = torch.cuda.graph_pool_handle()` and attached it to all branch graph captures, reducing the VRAM footprint of control-flow ops to simply `max(branch_mem)`.
+3. Replaced the `_static_inputs` mapping dict with a single `_shared_input` tensor allocation since branching executes mutually exclusively, saving more GBs of memory waste when inputs are large block states.
+
+**Why it matters on gfx1030**:
+RDNA2 conditional node dispatches are emulated entirely through a Python "supergraph" equivalent that pre-captures a graph for every branch condition (a huge weakness compared to proper hardware dispatching). Until native hardware control flow exists for these GPUs, minimizing the duplicate cost of every emulated branch is strictly critical to maintaining baseline KV-cache space on consumer 12GB cards.
