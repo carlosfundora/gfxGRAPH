@@ -1,0 +1,177 @@
+name: gfxgraph-portable-python
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "35 8 * * *"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: gfxgraph-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Compute changed path groups locally
+        id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+            changed="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")"
+          else
+            before="${{ github.event.before }}"
+            if [[ -n "$before" && "$before" != "0000000000000000000000000000000000000000" ]]; then
+              changed="$(git diff --name-only "$before...HEAD" || true)"
+            else
+              changed="$(git diff --name-only HEAD~1...HEAD || true)"
+            fi
+          fi
+
+          python=false
+          docs=false
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            case "$file" in
+              python/*|python/**|gfxgraph/*|gfxgraph/**|pyproject.toml|setup.py|setup.cfg|requirements*.txt|.github/workflows/gfxgraph-portable-python.yml)
+                python=true ;;
+            esac
+            case "$file" in
+              docs/*|docs/**|*.md|CHANGELOG.md|README*)
+                docs=true ;;
+            esac
+          done <<< "$changed"
+
+          printf '%s\n' "$changed"
+          echo "python=$python" >> "$GITHUB_OUTPUT"
+          echo "docs=$docs" >> "$GITHUB_OUTPUT"
+
+  python:
+    needs: changes
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' || needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install package
+        run: pip install -e .
+
+      - name: Import smoke
+        run: python -c "import gfxgraph; print(gfxgraph.__version__)"
+
+      - name: CLI smoke
+        run: gfxgraph --help || true
+
+      - name: Compile python sources
+        run: python -m compileall python
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: gfxgraph-failure-${{ matrix.python-version }}
+          path: |
+            **/*.log
+          if-no-files-found: ignore
+
+  docs-policy:
+    if: always() && github.event_name == 'pull_request'
+    needs: [changes]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Evaluate documentation policy advisory
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          python - <<'PY'
+          import os, subprocess
+          from pathlib import Path
+          base_ref = os.environ['BASE_REF']
+          subprocess.run(['git', 'fetch', '--no-tags', '--depth=1', 'origin', base_ref], check=True)
+          diff_text = subprocess.check_output(['git', 'diff', '--name-status', '--find-renames', f'origin/{base_ref}...HEAD'], text=True)
+          def is_doc(path: str) -> bool:
+              name = os.path.basename(path)
+              return path == 'CHANGELOG.md' or path.startswith('docs/') or path.endswith('.md') or name.startswith('README')
+          def is_codeish(path: str) -> bool:
+              return not is_doc(path) and not path.startswith('.github/') and path not in {'LICENSE','LICENSE.md','LICENSE.txt','.gitignore','.gitattributes'}
+          changes=[]
+          for raw in diff_text.splitlines():
+              parts=raw.split('\t')
+              if not parts: continue
+              status=parts[0]
+              if status.startswith('R') and len(parts)>=3: changes.append(parts[2])
+              elif len(parts)>=2: changes.append(parts[1])
+          docs_changed=sorted({p for p in changes if is_doc(p) and p!='CHANGELOG.md'})
+          code_changed=sorted({p for p in changes if is_codeish(p)})
+          failures=[]
+          if code_changed:
+              if 'CHANGELOG.md' not in changes: failures.append('`CHANGELOG.md` was not updated in this PR.')
+              if not docs_changed: failures.append('Code or configuration files changed, but no documentation files were updated.')
+          lines=['<!-- docs-policy-comment -->','## Documentation policy advisory','']
+          if failures:
+              lines += ['⚠️ Documentation or changelog updates appear to be missing.','','This is advisory and does not block CI.','','### Requested updates'] + [f'- {f}' for f in failures]
+          else:
+              lines.append('✅ Documentation policy looks good.')
+          lines += ['', '### Changed documentation files'] + ([f'- `{p}`' for p in docs_changed] if docs_changed else ['- None'])
+          lines += ['', '### Changed code/config files'] + ([f'- `{p}`' for p in code_changed] if code_changed else ['- None'])
+          Path('docs-policy-report.md').write_text('\n'.join(lines)+'\n')
+          Path('docs-policy-status.txt').write_text('fail\n' if failures else 'pass\n')
+          PY
+
+      - name: Create or update documentation policy comment
+        continue-on-error: true
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('docs-policy-report.md', 'utf8');
+            const status = fs.readFileSync('docs-policy-status.txt', 'utf8').trim();
+            const marker = '<!-- docs-policy-comment -->';
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner: context.repo.owner, repo: context.repo.repo, issue_number, per_page: 100 });
+            const existing = comments.find(comment => comment.body && comment.body.includes(marker));
+            if (status === 'fail') {
+              if (existing) await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id, body });
+              else await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number, body });
+            } else if (existing) {
+              await github.rest.issues.deleteComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id });
+            }
+
+      - name: Report documentation policy result
+        run: |
+          echo "Documentation policy status: $(cat docs-policy-status.txt 2>/dev/null || echo unavailable)"
+          cat docs-policy-report.md 2>/dev/null || true
