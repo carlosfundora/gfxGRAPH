@@ -39,10 +39,11 @@ class ConditionalGraph:
     def __init__(self):
         self._branches: Dict[str, Callable] = {}
         self._graphs: Dict[str, torch.cuda.CUDAGraph] = {}
-        self._static_inputs: Dict[str, torch.Tensor] = {}
+        self._shared_input: Optional[torch.Tensor] = None
         self._static_outputs: Dict[str, torch.Tensor] = {}
         self._captured = False
         self._failed_branches: set = set()
+        self._mempool = torch.cuda.graph_pool_handle()
 
     def add_branch(self, name: str, fn: Callable):
         """Register a branch function."""
@@ -64,21 +65,21 @@ class ConditionalGraph:
             _log.warning("example_input not contiguous — cloning for capture")
             example_input = example_input.contiguous()
 
-        for name, fn in self._branches.items():
-            static_input = example_input.clone()
-            self._static_inputs[name] = static_input
+        # Shared input for all branches to save VRAM
+        self._shared_input = example_input.clone()
 
+        for name, fn in self._branches.items():
             try:
                 # Warmup
                 torch.cuda.synchronize()
                 with torch.no_grad():
-                    _ = fn(static_input)
+                    _ = fn(self._shared_input)
                 torch.cuda.synchronize()
 
                 # Capture
                 graph = torch.cuda.CUDAGraph()
-                with torch.cuda.graph(graph):
-                    static_output = fn(static_input)
+                with torch.cuda.graph(graph, pool=self._mempool):
+                    static_output = fn(self._shared_input)
 
                 self._graphs[name] = graph
                 self._static_outputs[name] = static_output
@@ -131,7 +132,7 @@ class ConditionalGraph:
             return self._eager_fallback(branch, input_tensor)
 
         if input_tensor is not None:
-            self._static_inputs[branch].copy_(input_tensor)
+            self._shared_input.copy_(input_tensor)
 
         t0 = time.perf_counter()
         try:
@@ -163,9 +164,9 @@ class ConditionalGraph:
         if input_tensor is not None:
             with torch.no_grad():
                 return fn(input_tensor)
-        elif branch in self._static_inputs:
+        elif self._shared_input is not None:
             with torch.no_grad():
-                return fn(self._static_inputs[branch])
+                return fn(self._shared_input)
         else:
             raise RuntimeError(f"No input available for branch '{branch}'")
 
