@@ -9,3 +9,7 @@ Action: Abstract any complex graph orchestration (like vLLM's batch bucketing) b
  2026-05-01 - Inference Engine Graph Layer Fragmentation
 Learning: Across vLLM, SGLang, and TGI, there is a recurring architectural fragmentation in how CUDA graphs are orchestrated. vLLM uses a strict bucketed pool in `vllm/compilation/cuda_graph.py`, SGLang relies on deep integration with RadixAttention for graph capture, and TGI defers heavily to external custom kernels or PyTorch native compilation. This means any bridge layer (like gfxGRAPH) cannot assume a unified `torch.cuda.CUDAGraph` lifecycle; it must actively intercept or mock differing context managers and memory pool behaviors.
 Action: Any adoption of graph orchestration logic from these repos must isolate the memory pool lifecycle from the graph capture context manager to ensure cross-compatibility with differing engine designs.
+
+ 2026-05-02 - Extracting Independent Shape Bucketing
+Learning: Inference engines (vLLM, SGLang) heavily couple shape bucketing to PyTorch's native CUDA graph orchestration, making them brittle on AMD eager fallbacks.
+Action: Extracted knowledge from vLLM's `cuda_graph.py` to propose a pure-Python, framework-agnostic bucketing pool for `gfxGRAPH` that decouples memory management from the graph capture context.
