@@ -67,8 +67,10 @@ class ShapeBucketPool:
 
     def _warmup_all(self):
         """Pre-capture graphs for all bucket sizes (respects VRAM cap)."""
+        if not self._check_vram():
+            return
         for size in self.buckets:
-            self._capture_bucket(size)
+            self._capture_bucket(size, skip_vram_check=True)
 
     def _check_vram(self) -> bool:
         """Return True if we have headroom below the VRAM cap."""
@@ -84,7 +86,12 @@ class ShapeBucketPool:
             return False
         return True
 
-    def _capture_bucket(self, bucket_size: int, example_input=None) -> bool:
+    def _capture_bucket(
+        self,
+        bucket_size: int,
+        example_input=None,
+        skip_vram_check: bool = False,
+    ) -> bool:
         """Capture a CUDAGraph for the given bucket size. Returns True on success."""
         if bucket_size in self._warmed_up:
             return True
@@ -92,7 +99,7 @@ class ShapeBucketPool:
             return False
         if self.model_fn is None:
             return False
-        if not self._check_vram():
+        if not skip_vram_check and not self._check_vram():
             return False
 
         device = torch.device("cuda")
