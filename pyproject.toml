@@ -1,6 +1,6 @@
 [build-system]
-requires = ["maturin>=1.0,<2.0"]
-build-backend = "maturin"
+requires = ["setuptools>=68.0", "setuptools-rust"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "gfxgraph"
@@ -17,9 +17,4 @@ gfxgraph = "gfxgraph.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["python"]
-include = ["gfxgraph*", "hipgraph_bridge*", "gfxgraph_stats*"]
-
-[tool.maturin]
-features = ["pyo3/extension-module"]
-python-source = "python"
-module-name = "gfxgraph_stats"
+include = ["gfxgraph*", "hipgraph_bridge*"]

@@ -18,7 +18,7 @@
 - Reason selected: Best combination of highest performance impact (removing GIL contention in a hot path) and lowest complexity/risk. SGLang uses threads heavily, and continuous stat updates block the entire process otherwise.
 
 ## Implementation Summary
-Created a new Rust module `gfxgraph_stats` directly integrated into the root `pyproject.toml` utilizing `maturin` and `pyo3` to expose `bump`, `record_replay_us`, `stats`, and `reset` methods lock-free using `std::sync::atomic` and `std::sync::RwLock` for dynamic keys. Modified `python/gfxgraph/_enable.py` to optionally import and use the rust implementation, falling back to python if unavailable.
+Created a new Rust module `gfxgraph_stats` directly integrated into the root `pyproject.toml` utilizing `setuptools_rust` and `pyo3` to expose `bump`, `record_replay_us`, `stats`, and `reset` methods lock-free using `std::sync::atomic` and `std::sync::RwLock` for dynamic keys. Modified `python/gfxgraph/_enable.py` to optionally import and use the rust implementation, falling back to python if unavailable.
 
 ## Before Benchmark
 100k single-threaded iterations: 158.41 ms

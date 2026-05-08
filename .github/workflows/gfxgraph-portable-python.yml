@@ -79,17 +79,20 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Install package with uv
-        run: uv pip install --system -e .
+        run: uv venv && source .venv/bin/activate && uv pip install -e .
 
       - name: Import smoke
-        run: uv run python -c "import gfxgraph; print(gfxgraph.__version__)"
+        run: source .venv/bin/activate && python -c "import gfxgraph; print(gfxgraph.__version__)"
 
       - name: CLI smoke
-        run: uv run gfxgraph --help || true
+        run: source .venv/bin/activate && gfxgraph --help || true
 
       - name: Compile python sources
-        run: uv run python -m compileall python
+        run: source .venv/bin/activate && python -m compileall python
 
       - name: Upload artifacts on failure
         if: failure()
