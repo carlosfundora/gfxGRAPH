@@ -1,0 +1,11 @@
+{
+  "candidate": "python/hipgraph_bridge/shape_bucketing.py",
+  "implementation": "before",
+  "command": "python benchmark_bucketing.py before",
+  "timestamp": "2026-05-08T20:26:06.113168",
+  "iterations": 1200000,
+  "input_description": "Repeated bucket selection for varied sizes",
+  "duration_ms": 403.24228999998013,
+  "throughput": 2975878.348473964,
+  "notes": "Selects buckets based on bisect"
+}

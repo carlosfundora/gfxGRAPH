@@ -12,6 +12,13 @@ Hardened with:
 """
 
 import bisect
+
+try:
+    import gfxgraph_rs
+    _HAS_RUST_EXT = True
+except ImportError:
+    _HAS_RUST_EXT = False
+
 import logging
 import os
 from typing import Callable, List, Optional
@@ -55,6 +62,10 @@ class ShapeBucketPool:
 
         self.model_fn = model_fn
         self.buckets = sorted(buckets or [1, 2, 4, 8, 16, 32, 64])
+        if _HAS_RUST_EXT:
+            self._rust_selector = gfxgraph_rs.BucketSelector(self.buckets)
+        else:
+            self._rust_selector = None
         self._graphs = {}      # bucket_size → CUDAGraph
         self._max_static_input = None
         self._static_outputs = {}  # bucket_size → static output tensor
@@ -148,6 +159,9 @@ class ShapeBucketPool:
 
     def select_bucket(self, input_size: int) -> int:
         """Find the smallest bucket >= input_size."""
+        if self._rust_selector is not None:
+            return self._rust_selector.select_bucket(input_size)
+
         idx = bisect.bisect_left(self.buckets, input_size)
         if idx >= len(self.buckets):
             raise ValueError(
