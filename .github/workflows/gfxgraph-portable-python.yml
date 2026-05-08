@@ -80,7 +80,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install package with uv
-        run: uv pip install --system -e .
+        run: uv pip install --system --break-system-packages -e .
 
       - name: Import smoke
         run: uv run python -c "import gfxgraph; print(gfxgraph.__version__)"
