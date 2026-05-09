@@ -31,9 +31,13 @@ impl BucketSelector {
     }
 }
 
+mod stats;
+use stats::StatsManager;
+
 #[pymodule]
 fn gfxgraph_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BucketSelector>()?;
+    m.add_class::<StatsManager>()?;
     Ok(())
 }
 

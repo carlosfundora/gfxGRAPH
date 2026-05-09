@@ -20,3 +20,4 @@ Tier-2 remains a two-step install so the repo-root package stays pure Python.
 - PyTorch 2.9+ (ROCm build)
 - ROCm 7.2.0+
 - AMD GPU (gfx1030 target)
+- Rust toolchain (cargo, maturin) for gfxgraph_rs compilation

@@ -49,15 +49,23 @@ _enabled = False
 _validate_mode = False
 _originals = {}  # stash for monkey-patched originals
 _stats_lock = threading.Lock()
-_stats = {
-    "enabled_at": None,
-    "capture_count": 0,
-    "replay_count": 0,
-    "fallback_count": 0,
-    "validation_failures": 0,
-    "avg_replay_us": 0.0,
-    "_total_replay_us": 0.0,
-}
+
+try:
+    import gfxgraph_rs
+    _stats = gfxgraph_rs.StatsManager()
+    _HAS_RUST_STATS = True
+except ImportError:
+    _stats = {
+        "enabled_at": None,
+        "capture_count": 0,
+        "replay_count": 0,
+        "fallback_count": 0,
+        "validation_failures": 0,
+        "avg_replay_us": 0.0,
+        "_total_replay_us": 0.0,
+    }
+    _HAS_RUST_STATS = False
+
 _atexit_registered = False
 
 
@@ -65,18 +73,24 @@ _atexit_registered = False
 
 def bump(counter: str, amount: int = 1) -> None:
     """Thread-safe counter increment. Used by bridge modules."""
-    with _stats_lock:
-        _stats[counter] = _stats.get(counter, 0) + amount
+    if _HAS_RUST_STATS:
+        _stats.bump(counter, amount)
+    else:
+        with _stats_lock:
+            _stats[counter] = _stats.get(counter, 0) + amount
 
 
 def record_replay_us(us: float) -> None:
     """Record a replay duration in microseconds, update running average."""
-    with _stats_lock:
-        _stats["replay_count"] += 1
-        _stats["_total_replay_us"] += us
-        _stats["avg_replay_us"] = (
-            _stats["_total_replay_us"] / _stats["replay_count"]
-        )
+    if _HAS_RUST_STATS:
+        _stats.record_replay_us(us)
+    else:
+        with _stats_lock:
+            _stats["replay_count"] += 1
+            _stats["_total_replay_us"] += us
+            _stats["avg_replay_us"] = (
+                _stats["_total_replay_us"] / _stats["replay_count"]
+            )
 
 
 def get_validate_mode() -> bool:
@@ -136,8 +150,12 @@ def enable(*, debug: bool = False, validate: bool = False) -> None:
         atexit.register(_shutdown)
         _atexit_registered = True
 
-    with _stats_lock:
-        _stats["enabled_at"] = time.time()
+    if _HAS_RUST_STATS:
+        _stats.set_enabled_at(time.time())
+    else:
+        with _stats_lock:
+            _stats["enabled_at"] = time.time()
+
     _enabled = True
     _log.info("gfxGRAPH enabled successfully")
 
@@ -167,9 +185,12 @@ def is_enabled() -> bool:
 
 def stats() -> dict:
     """Return performance/diagnostic counters (thread-safe snapshot)."""
-    with _stats_lock:
-        out = {k: v for k, v in _stats.items() if not k.startswith("_")}
-    return out
+    if _HAS_RUST_STATS:
+        return _stats.stats()
+    else:
+        with _stats_lock:
+            out = {k: v for k, v in _stats.items() if not k.startswith("_")}
+        return out
 
 
 def health_check() -> dict:

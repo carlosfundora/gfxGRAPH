@@ -83,7 +83,7 @@ transparently on RDNA2.
 
 | Tier | Install Style | What You Get | Best For |
 |------|---------------|--------------|----------|
-| **Tier 1** | Pure Python | Monkey-patch, eager fallback, shape bucketing, validation, stats, health checks | Most users getting started |
+| **Tier 1** | Pure Python | Monkey-patch, eager fallback, shape bucketing (Rust native), validation, stats (Rust native), health checks | Most users getting started |
 | **Tier 2** | Python + native companion | Native HIP Graph gap bridges and full parity path | Users who need the native-only gaps |
 
 ### Tier 1: Python-Only Mode
@@ -100,8 +100,12 @@ transparently on RDNA2.
 
 **Dependencies:**
 ```bash
-# That's it — just PyTorch (ROCm build) and Python
+# Install PyTorch (ROCm build)
 pip install torch --index-url https://download.pytorch.org/whl/rocm6.2  # or your ROCm version
+
+# Install Rust toolchain (required for optimal shape bucketing and stats tracking overhead)
+pip install maturin
+# Follow Rust installation steps at https://rustup.rs/
 ```
 
 **Install gfxGRAPH:**
