@@ -1,0 +1,12 @@
+[package]
+name = "gfxgraph_stats"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "gfxgraph_stats"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.20.0", features = ["extension-module"] }
+lazy_static = "1.4.0"

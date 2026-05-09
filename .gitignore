@@ -28,5 +28,9 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+rust_stats/target/
+rust_stats/Cargo.lock
+target/
+Cargo.lock
 gfxgraph_rs/target/
 gfxgraph_rs/target/
