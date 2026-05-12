@@ -16,6 +16,12 @@ import time
 import torch
 from typing import Callable, Dict, Optional
 
+try:
+    import gfxgraph_rs
+    _HAS_RUST_EXT = True
+except ImportError:
+    _HAS_RUST_EXT = False
+
 _log = logging.getLogger("gfxgraph")
 
 
@@ -44,6 +50,7 @@ class ConditionalGraph:
         self._captured = False
         self._failed_branches: set = set()
         self._mempool = torch.cuda.graph_pool_handle()
+        self._rust_runner = None
 
     def add_branch(self, name: str, fn: Callable):
         """Register a branch function."""
@@ -97,6 +104,16 @@ class ConditionalGraph:
                 except ImportError:
                     pass
 
+        if _HAS_RUST_EXT:
+            self._rust_runner = gfxgraph_rs.ConditionalGraphRunner(
+                list(self._branches.keys()),
+                self._graphs,
+                self._static_outputs,
+                list(self._failed_branches),
+                self._shared_input,
+                self._branches
+            )
+
         self._captured = True
         try:
             from gfxgraph._enable import bump
@@ -114,6 +131,10 @@ class ConditionalGraph:
         """
         if not self._captured:
             raise RuntimeError("Call capture() first")
+
+        if self._rust_runner is not None:
+            return self._rust_runner.run(branch, input_tensor)
+
         if branch not in self._branches:
             raise KeyError(
                 f"Unknown branch '{branch}'. "

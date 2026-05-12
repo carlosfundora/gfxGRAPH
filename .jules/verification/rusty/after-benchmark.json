@@ -1,12 +1,10 @@
-{"candidate": "gfxgraph._enable stats tracker", "implementation": "after", "command": "python benchmarks/bench_stats_rust.py", "timestamp": "2024-05-08T00:00:00Z", "iterations": 100000, "input_description": "Single thread tight loop", "duration_ms": 22.656861000086792, "throughput": "4413674.07 ops/sec", "notes": "Threaded (4x50k) duration: 50.40 ms"}
 {
-  "candidate": "python/hipgraph_bridge/shape_bucketing.py",
+  "candidate": "python/hipgraph_bridge/conditional.py",
   "implementation": "after",
-  "command": "python benchmark_bucketing.py after",
-  "timestamp": "2026-05-08T20:37:35.010390",
-  "iterations": 1200000,
-  "input_description": "Repeated bucket selection for varied sizes",
-  "duration_ms": 196.60362599984182,
-  "throughput": 6103651.414857249,
-  "notes": "Selects buckets based on bisect"
+  "command": "python benchmarks/bench_conditional_mock.py",
+  "timestamp": "2026-05-08T00:00:00Z",
+  "iterations": 200000,
+  "input_description": "Alternating branch execution (mocked GPU)",
+  "duration_ms": 9294.43717599952,
+  "throughput": "21518.25 ops/sec"
 }
