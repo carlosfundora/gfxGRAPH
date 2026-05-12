@@ -21,7 +21,7 @@ except ImportError:
 
 import logging
 import os
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Tuple
 
 import torch
 
@@ -63,14 +63,17 @@ class ShapeBucketPool:
         self.model_fn = model_fn
         self.buckets = sorted(buckets or [1, 2, 4, 8, 16, 32, 64])
         if _HAS_RUST_EXT:
-            self._rust_selector = gfxgraph_rs.BucketSelector(self.buckets)
+            self._router = gfxgraph_rs.BucketRouter(self.buckets)
+            self._warmed_up = None
+            self._failed_buckets = None
         else:
-            self._rust_selector = None
+            self._router = None
+            self._warmed_up = set()
+            self._failed_buckets = set()  # buckets that failed capture
+
         self._graphs = {}      # bucket_size → CUDAGraph
         self._max_static_input = None
         self._static_outputs = {}  # bucket_size → static output tensor
-        self._warmed_up = set()
-        self._failed_buckets = set()  # buckets that failed capture
         self._mempool = torch.cuda.graph_pool_handle()
 
         if warmup and model_fn is not None:
@@ -97,6 +100,32 @@ class ShapeBucketPool:
             return False
         return True
 
+    def _is_warmed_up(self, bucket_size: int) -> bool:
+        if self._router is not None:
+            # We don't expose pure `is_warmed_up` directly anymore from the router natively,
+            # but we can check via route
+            bucket, state = self._router.route(bucket_size)
+            return state == 0
+        return bucket_size in self._warmed_up
+
+    def _is_failed(self, bucket_size: int) -> bool:
+        if self._router is not None:
+            bucket, state = self._router.route(bucket_size)
+            return state == 2
+        return bucket_size in self._failed_buckets
+
+    def _mark_warmed_up(self, bucket_size: int):
+        if self._router is not None:
+            self._router.mark_warmed_up(bucket_size)
+        else:
+            self._warmed_up.add(bucket_size)
+
+    def _mark_failed(self, bucket_size: int):
+        if self._router is not None:
+            self._router.mark_failed(bucket_size)
+        else:
+            self._failed_buckets.add(bucket_size)
+
     def _capture_bucket(
         self,
         bucket_size: int,
@@ -104,9 +133,10 @@ class ShapeBucketPool:
         skip_vram_check: bool = False,
     ) -> bool:
         """Capture a CUDAGraph for the given bucket size. Returns True on success."""
-        if bucket_size in self._warmed_up:
+        # For direct capture calls (e.g. warmup_all), we evaluate state manually
+        if self._is_warmed_up(bucket_size):
             return True
-        if bucket_size in self._failed_buckets:
+        if self._is_failed(bucket_size):
             return False
         if self.model_fn is None:
             return False
@@ -142,7 +172,7 @@ class ShapeBucketPool:
 
             self._graphs[bucket_size] = graph
             self._static_outputs[bucket_size] = static_output
-            self._warmed_up.add(bucket_size)
+            self._mark_warmed_up(bucket_size)
             _log.debug("Captured graph for bucket size %d", bucket_size)
             return True
 
@@ -151,16 +181,18 @@ class ShapeBucketPool:
                 "Graph capture failed for bucket %d: %s — will use eager fallback",
                 bucket_size, e,
             )
-            self._failed_buckets.add(bucket_size)
+            self._mark_failed(bucket_size)
             # Clean up partial state
             self._static_outputs.pop(bucket_size, None)
             self._graphs.pop(bucket_size, None)
             return False
 
-    def select_bucket(self, input_size: int) -> int:
-        """Find the smallest bucket >= input_size."""
-        if self._rust_selector is not None:
-            return self._rust_selector.select_bucket(input_size)
+    def route_bucket(self, input_size: int) -> Tuple[int, int]:
+        """Find the smallest bucket >= input_size and return its current state.
+        State: 0=Ready, 1=NeedsWarmup, 2=Failed.
+        """
+        if self._router is not None:
+            return self._router.route(input_size)
 
         idx = bisect.bisect_left(self.buckets, input_size)
         if idx >= len(self.buckets):
@@ -168,7 +200,14 @@ class ShapeBucketPool:
                 f"Input size {input_size} exceeds largest bucket "
                 f"{self.buckets[-1]}. Add a larger bucket."
             )
-        return self.buckets[idx]
+        bucket = self.buckets[idx]
+        if bucket in self._warmed_up:
+            state = 0
+        elif bucket in self._failed_buckets:
+            state = 2
+        else:
+            state = 1
+        return bucket, state
 
     def __call__(self, input_tensor_or_size) -> torch.Tensor:
         """Run with automatic bucket selection.
@@ -190,13 +229,15 @@ class ShapeBucketPool:
                 f"Expected torch.Tensor or int, got {type(input_tensor_or_size).__name__}"
             )
 
-        bucket = self.select_bucket(input_size)
+        bucket, state = self.route_bucket(input_size)
 
         # Lazy capture if not warmed up
-        if bucket not in self._warmed_up:
+        if state == 1:
             if not self._capture_bucket(bucket, input_tensor):
                 # Capture failed or VRAM exceeded — eager fallback
                 return self._eager_fallback(input_tensor, input_size)
+        elif state == 2:
+            return self._eager_fallback(input_tensor, input_size)
 
         if bucket not in self._graphs:
             return self._eager_fallback(input_tensor, input_size)
@@ -253,9 +294,21 @@ class ShapeBucketPool:
     @property
     def captured_buckets(self) -> list:
         """List of bucket sizes that have been successfully captured."""
+        if self._router is not None:
+            return self._router.warmed_up_list()
         return sorted(self._warmed_up)
 
     @property
     def failed_buckets(self) -> list:
         """List of bucket sizes that failed to capture."""
+        if self._router is not None:
+            return self._router.failed_list()
         return sorted(self._failed_buckets)
+
+    # Maintain legacy property for compatibility during refactoring tools
+    @property
+    def select_bucket(self):
+        def _wrapper(input_size):
+            b, _ = self.route_bucket(input_size)
+            return b
+        return _wrapper
