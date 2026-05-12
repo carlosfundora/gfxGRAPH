@@ -1,1 +1,11 @@
+{
+  "candidate": "python/hipgraph_bridge/conditional.py",
+  "implementation": "before",
+  "command": "python benchmarks/bench_conditional_mock.py",
+  "timestamp": "2026-05-08T00:00:00Z",
+  "iterations": 200000,
+  "input_description": "Alternating branch execution (mocked GPU)",
+  "duration_ms": 63313.80551699999,
+  "throughput": "3158.87 ops/sec"
+}
 {"candidate": "python/hipgraph_bridge/shape_bucketing.py", "implementation": "before", "command": "python benchmarks/bench_routing.py", "timestamp": "2024-05-08T00:00:00Z", "iterations": 1000000, "input_description": "Repeated bucket size lookup and state validation", "duration_ms": 430.36557599953085, "throughput": "2323605.92 ops/sec"}
