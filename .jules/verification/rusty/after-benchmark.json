@@ -8,3 +8,4 @@
   "duration_ms": 9294.43717599952,
   "throughput": "21518.25 ops/sec"
 }
+{"candidate": "python/hipgraph_bridge/shape_bucketing.py", "implementation": "after", "command": "python benchmarks/bench_routing_rust.py", "timestamp": "2024-05-08T00:00:00Z", "iterations": 1000000, "input_description": "Repeated bucket size lookup and state validation", "duration_ms": 433.3121569998184, "throughput": "2307805.09 ops/sec"}
