@@ -1,20 +1,18 @@
 # Benchmark Summary
 
-Before command: `python3 benchmarks/bench_conditional_mock.py` (Before refactor)
-After command: `python3 benchmarks/bench_conditional_mock.py` (After refactor)
+- **Candidate:** `gfxgraph._enable stats tracker`
+- **Before Command:** `PYTHONPATH=$PWD/python python benchmarks/bench_stats.py`
+- **After Command:** `PYTHONPATH=$PWD/python python benchmarks/bench_stats_rust.py`
 
-## Single Thread
+## Results (Single Thread)
+- **Before Duration:** ~84.5 ms (1,183,297 ops/sec)
+- **After Duration:** ~33.3 ms (3,001,509 ops/sec)
+- **Improvement:** ~2.5x faster (153% increase in ops/sec)
 
-Before timing: 63313.80 ms
-After timing: 9294.43 ms
+## Results (Threaded - 4x50k)
+- **Before Duration:** ~259.4 ms
+- **After Duration:** ~76.3 ms
+- **Improvement:** ~3.4x faster (reduction in lock contention overhead)
 
-Percent change: (63313.80 - 9294.43) / 63313.80 * 100% = ~85.3% reduction in execution time
-
-Notes: Migrating the `ConditionalGraph.run()` method inner-loop out of pure python dictionary and execution logic to rust provides an 85% speedup on mocked bounds checks/fallbacks.
-
-- Before command: `python benchmarks/bench_routing.py`
-- After command: `python benchmarks/bench_routing_rust.py`
-- Before timing: 430.36 ms
-- After timing: 433.31 ms
-- Percent change: +0.6%
-- Notes: Evaluated the impact of consolidating `ShapeBucketPool` state management directly into the native PyO3 Rust `gfxgraph_rs` binary search iterator loop. The consolidation offsets the PyO3 serialization cost boundary crossing completely but lacks heavy math requirements necessary for Rust to definitively out-pace pure python object referencing mappings.
+## Notes
+The pure Python implementation used `threading.Lock` which introduced significant overhead under load. The new Rust implementation uses `DashMap` and `Mutex` internally via PyO3 to provide thread-safe, high-performance counting.
