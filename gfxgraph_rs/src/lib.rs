@@ -220,7 +220,7 @@ impl ConditionalGraphRunner {
 
 #[pymodule]
 fn gfxgraph_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<BucketSelector>()?;
+
     m.add_class::<ConditionalGraphRunner>()?;
     m.add_class::<BucketRouter>()?;
     Ok(())
