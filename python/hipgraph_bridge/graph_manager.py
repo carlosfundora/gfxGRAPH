@@ -246,13 +246,19 @@ class BridgedCUDAGraph:
         """In validation mode, compare graph output vs eager (PyTorch #155684)."""
         try:
             from gfxgraph._enable import get_validate_mode
-            if not get_validate_mode():
-                return graph_output
+            validation_enabled = get_validate_mode()
         except ImportError:
+            validation_enabled = False
+
+        if not validation_enabled or self._model_fn is None or input_tensor is None:
             return graph_output
 
-        if self._model_fn is None or input_tensor is None:
-            return graph_output
+        try:
+            import gfxgraph_rs
+            validator = gfxgraph_rs.BridgedGraphValidator(validation_enabled)
+            return validator.maybe_validate(graph_output, input_tensor, self._model_fn)
+        except ImportError:
+            pass
 
         _log.debug("Validation: comparing graph output vs eager")
         with torch.no_grad():
