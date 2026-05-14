@@ -1,1 +1,10 @@
-{"candidate": "gfxgraph._enable stats tracker", "implementation": "before", "command": "python benchmarks/bench_stats.py", "timestamp": "2024-05-08T00:00:00Z", "iterations": 100000, "input_description": "Single thread tight loop", "duration_ms": 28.491905000009865, "throughput": "3509768.83 ops/sec", "notes": "Threaded (4x50k) duration: 63.63 ms"}
+{
+  "candidate": "python/hipgraph_bridge/graph_manager.py",
+  "implementation": "before",
+  "command": "python benchmarks/bench_graph_manager.py",
+  "timestamp": "2026-05-08T00:00:00Z",
+  "iterations": 100000,
+  "input_description": "Repeated graph replay with validation enabled (mocked GPU)",
+  "duration_ms": 29296.26078499996,
+  "throughput": "3413.40 ops/sec"
+}

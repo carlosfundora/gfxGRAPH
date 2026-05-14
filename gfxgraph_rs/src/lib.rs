@@ -220,8 +220,73 @@ impl ConditionalGraphRunner {
 
 #[pymodule]
 fn gfxgraph_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<BucketSelector>()?;
     m.add_class::<ConditionalGraphRunner>()?;
     m.add_class::<BucketRouter>()?;
+    m.add_class::<BridgedGraphValidator>()?;
     Ok(())
+}
+
+#[pyclass]
+pub struct BridgedGraphValidator {
+    validation_enabled: bool,
+}
+
+#[pymethods]
+impl BridgedGraphValidator {
+    #[new]
+    fn new(validation_enabled: bool) -> Self {
+        BridgedGraphValidator { validation_enabled }
+    }
+
+    fn maybe_validate<'py>(
+        &self,
+        py: Python<'py>,
+        graph_output: PyObject,
+        input_tensor: Option<PyObject>,
+        model_fn: Option<PyObject>,
+    ) -> PyResult<PyObject> {
+        if !self.validation_enabled {
+            return Ok(graph_output);
+        }
+
+        let model = match model_fn {
+            Some(m) => m,
+            None => return Ok(graph_output),
+        };
+
+        let input = match input_tensor {
+            Some(i) => i,
+            None => return Ok(graph_output),
+        };
+
+        let torch = py.import("torch")?;
+        let no_grad_ctx = torch.call_method0("no_grad")?;
+        let _ = no_grad_ctx.call_method0("__enter__")?;
+
+        let eager_output = model.call1(py, (input,))?;
+
+        let _ = no_grad_ctx.call_method1("__exit__", (py.None(), py.None(), py.None()))?;
+
+        // simplified for now, use default tolerances or implement kwargs equivalent
+        let allclose = torch.call_method1("allclose", (&graph_output, &eager_output))?;
+        let is_close: bool = allclose.extract()?;
+
+        if !is_close {
+            let log_mod = py.import("logging")?;
+            let logger = log_mod.call_method1("getLogger", ("gfxgraph",))?;
+            logger.call_method1("error", ("VALIDATION FAILURE: graph output differs from eager output! \u{2014} possible PyTorch #155684",))?;
+
+            let enable_mod = py.import("gfxgraph._enable").ok();
+            if let Some(m) = enable_mod {
+                let _ = m.call_method1("bump", ("validation_failures",));
+            }
+            return Ok(eager_output);
+        }
+
+        let log_mod = py.import("logging")?;
+        let logger = log_mod.call_method1("getLogger", ("gfxgraph",))?;
+        logger.call_method1("debug", ("Validation passed",))?;
+
+        Ok(graph_output)
+    }
 }
