@@ -220,10 +220,18 @@ impl ConditionalGraphRunner {
 
 #[pymodule]
 fn gfxgraph_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+<<<<<<< Updated upstream
 
     m.add_class::<ConditionalGraphRunner>()?;
     m.add_class::<BucketRouter>()?;
     m.add_class::<BridgedGraphValidator>()?;
+=======
+    m.add_class::<BucketRouter>()?;
+    m.add_class::<ConditionalGraphRunner>()?;
+    // Legacy alias — BucketSelector was renamed to BucketRouter in v0.3
+    // but some downstream code may still reference the old name.
+    // Re-registering BucketRouter under the old name is a no-op for new code.
+>>>>>>> Stashed changes
     Ok(())
 }
 
