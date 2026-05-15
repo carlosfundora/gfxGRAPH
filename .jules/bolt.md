@@ -1,0 +1,3 @@
+## 2024-05-24 - Module Level Import Caching for Observability
+**Learning:** In highly-frequent code paths (like `_bump_capture()`, `_bump_fallback()`, `_record_replay()` called on every graph capture/replay), doing an inline `try: from gfxgraph._enable import ... except ImportError:` takes ~1.1µs per call. Caching the imported function at module level drops this to ~0.16µs. While `gfxGRAPH`'s design requires `hipgraph_bridge` to be importable without `gfxgraph` (hence the try/except), we can do this caching safely at the module level.
+**Action:** Replace inline imports in hot-path counters with module-level cached functions that handle the missing dependency gracefully.

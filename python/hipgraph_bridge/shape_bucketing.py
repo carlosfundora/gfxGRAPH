@@ -25,6 +25,11 @@ from typing import Callable, List, Optional, Tuple
 
 import torch
 
+try:
+    from gfxgraph._enable import bump as _bump
+except ImportError:
+    _bump = None
+
 _log = logging.getLogger("gfxgraph")
 
 # Configurable VRAM cap (fraction, 0.0-1.0). Default: 80%.
@@ -262,11 +267,8 @@ class ShapeBucketPool:
                 "No graph available and no model_fn for eager fallback"
             )
         _log.debug("Shape pool eager fallback for size %d", input_size)
-        try:
-            from gfxgraph._enable import bump
-            bump("fallback_count")
-        except ImportError:
-            pass
+        if _bump is not None:
+            _bump("fallback_count")
 
         if input_tensor is not None:
             with torch.no_grad():
