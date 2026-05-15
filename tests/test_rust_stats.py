@@ -5,8 +5,8 @@ def test_rust_stats_available():
     assert _HAS_RUST_STATS is True, "Rust stats module should be loaded"
 
 def test_bump():
-    import gfxgraph_stats
-    gfxgraph_stats.reset()
+    from gfxgraph_stats import reset
+    reset()
 
     bump("capture_count", 5)
     bump("replay_count", 1)
@@ -21,8 +21,8 @@ def test_bump():
     assert s["custom_metric"] == 10
 
 def test_record_replay_us():
-    import gfxgraph_stats
-    gfxgraph_stats.reset()
+    from gfxgraph_stats import reset
+    reset()
 
     record_replay_us(100.0)
     record_replay_us(200.0)

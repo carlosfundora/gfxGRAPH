@@ -16,6 +16,21 @@ import torch
 
 from hipgraph_bridge.shape_bucketing import ShapeBucketPool
 
+try:
+    from gfxgraph._enable import bump as _bump
+except ImportError:
+    _bump = None
+
+try:
+    from gfxgraph._enable import record_replay_us as _record_replay_us
+except ImportError:
+    _record_replay_us = None
+
+try:
+    from gfxgraph._enable import get_validate_mode as _get_validate_mode
+except ImportError:
+    _get_validate_mode = None
+
 _log = logging.getLogger("gfxgraph")
 
 # Capture the original CUDAGraph class BEFORE monkey-patching replaces it.
@@ -244,10 +259,9 @@ class BridgedCUDAGraph:
 
     def _maybe_validate(self, graph_output, input_tensor):
         """In validation mode, compare graph output vs eager (PyTorch #155684)."""
-        try:
-            from gfxgraph._enable import get_validate_mode
-            validation_enabled = get_validate_mode()
-        except ImportError:
+        if _get_validate_mode is not None:
+            validation_enabled = _get_validate_mode()
+        else:
             validation_enabled = False
 
         if not validation_enabled or self._model_fn is None or input_tensor is None:
@@ -270,11 +284,8 @@ class BridgedCUDAGraph:
                 "max_diff=%.6f — possible PyTorch #155684",
                 (graph_output - eager_output).abs().max().item()
             )
-            try:
-                from gfxgraph._enable import bump
-                bump("validation_failures")
-            except ImportError:
-                pass
+            if _bump is not None:
+                _bump("validation_failures")
             return eager_output  # return the correct (eager) output
 
         _log.debug("Validation passed")
@@ -327,25 +338,16 @@ class BridgedCUDAGraph:
 # ---------- Counter helpers (import-safe) ----------
 
 def _bump_capture():
-    try:
-        from gfxgraph._enable import bump
-        bump("capture_count")
-    except ImportError:
-        pass
+    if _bump is not None:
+        _bump("capture_count")
 
 
 def _bump_fallback():
-    try:
-        from gfxgraph._enable import bump
-        bump("fallback_count")
-    except ImportError:
-        pass
+    if _bump is not None:
+        _bump("fallback_count")
 
 
 def _record_replay(t0: float):
-    try:
-        from gfxgraph._enable import record_replay_us
+    if _record_replay_us is not None:
         us = (time.perf_counter() - t0) * 1e6
-        record_replay_us(us)
-    except ImportError:
-        pass
+        _record_replay_us(us)

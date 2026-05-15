@@ -22,6 +22,16 @@ try:
 except ImportError:
     _HAS_RUST_EXT = False
 
+try:
+    from gfxgraph._enable import bump as _bump
+except ImportError:
+    _bump = None
+
+try:
+    from gfxgraph._enable import record_replay_us as _record_replay_us
+except ImportError:
+    _record_replay_us = None
+
 _log = logging.getLogger("gfxgraph")
 
 
@@ -98,11 +108,8 @@ class ConditionalGraph:
                     name, e,
                 )
                 self._failed_branches.add(name)
-                try:
-                    from gfxgraph._enable import bump
-                    bump("fallback_count")
-                except ImportError:
-                    pass
+                if _bump is not None:
+                    _bump("fallback_count")
 
         if _HAS_RUST_EXT:
             self._rust_runner = gfxgraph_rs.ConditionalGraphRunner(
@@ -115,11 +122,8 @@ class ConditionalGraph:
             )
 
         self._captured = True
-        try:
-            from gfxgraph._enable import bump
-            bump("capture_count", len(self._graphs))
-        except ImportError:
-            pass
+        if _bump is not None:
+            _bump("capture_count", len(self._graphs))
 
     def run(self, branch: str, input_tensor: Optional[torch.Tensor] = None) -> torch.Tensor:
         """Execute a specific branch.
@@ -163,12 +167,9 @@ class ConditionalGraph:
             self._failed_branches.add(branch)
             return self._eager_fallback(branch, input_tensor)
 
-        try:
-            from gfxgraph._enable import record_replay_us
+        if _record_replay_us is not None:
             us = (time.perf_counter() - t0) * 1e6
-            record_replay_us(us)
-        except ImportError:
-            pass
+            _record_replay_us(us)
 
         return self._static_outputs[branch]
 
@@ -176,11 +177,8 @@ class ConditionalGraph:
         """Run branch function eagerly."""
         fn = self._branches[branch]
         _log.debug("Eager fallback for branch '%s'", branch)
-        try:
-            from gfxgraph._enable import bump
-            bump("fallback_count")
-        except ImportError:
-            pass
+        if _bump is not None:
+            _bump("fallback_count")
 
         if input_tensor is not None:
             with torch.no_grad():
