@@ -222,6 +222,9 @@ export GFXGRAPH=debug
 # Optional: VRAM cap for graph capture scratch (default 0.90 = 90% of total)
 export GFXGRAPH_VRAM_CAP=0.90
 
+# Optional: replay hot mode (skips replay-path diagnostics for lowest overhead)
+export GFXGRAPH_REPLAY_HOT_MODE=1
+
 # Optional: disable gfxGRAPH while keeping RDNA2 kernels
 export SGLANG_DISABLE_GFXGRAPH=1
 
@@ -241,6 +244,7 @@ INFO: gfxGRAPH health check passed: AMD Radeon RX 6700 XT (gfx1030), VRAM 10240M
 GFXGRAPH=1 python3 my_script.py        # standard mode
 GFXGRAPH=debug python3 my_script.py    # verbose logging
 GFXGRAPH=validate python3 my_script.py # correctness checking
+GFXGRAPH_REPLAY_HOT_MODE=1 python3 my_script.py # lower-overhead replay path
 ```
 
 ---

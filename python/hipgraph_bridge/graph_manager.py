@@ -49,6 +49,7 @@ _ADAPTIVE_GRAPH_ADVANTAGE = min(1.0, max(0.5, float(os.environ.get("GFXGRAPH_ADA
 _ADAPTIVE_SIGNATURE_CACHE_MAX = max(32, int(os.environ.get("GFXGRAPH_ADAPTIVE_SIGNATURE_CACHE_MAX", "512")))
 _ADAPTIVE_SPIKE_SWITCH_FACTOR = max(1.0, float(os.environ.get("GFXGRAPH_ADAPTIVE_SPIKE_SWITCH_FACTOR", "1.20")))
 _ADAPTIVE_SPIKE_SWITCH_HITS = max(1, int(os.environ.get("GFXGRAPH_ADAPTIVE_SPIKE_SWITCH_HITS", "2")))
+_HOT_REPLAY_MODE = os.environ.get("GFXGRAPH_REPLAY_HOT_MODE", "").strip() in {"1", "true", "TRUE", "yes", "on"}
 _ADAPTIVE_SIGNATURE_CACHE_LOCK = threading.Lock()
 _ADAPTIVE_SIGNATURE_CACHE = {}
 
@@ -286,7 +287,8 @@ class BridgedCUDAGraph:
         if self._shape_pool is not None and batch_size is not None:
             t0 = time.perf_counter()
             result = self._shape_pool(batch_size)
-            self._record_replay_sample(t0)
+            if not _HOT_REPLAY_MODE:
+                self._record_replay_sample(t0)
             return self._maybe_validate(result, input_tensor)
 
         # Standard graph replay
@@ -299,8 +301,9 @@ class BridgedCUDAGraph:
                 self._eager_fallback = True
                 _bump_fallback()
                 return self._run_eager(input_tensor)
-            self._record_replay_sample(t0)
-            self._maybe_update_adaptive_mode(input_tensor)
+            if not _HOT_REPLAY_MODE:
+                self._record_replay_sample(t0)
+                self._maybe_update_adaptive_mode(input_tensor)
             return self._maybe_validate(self._static_output, input_tensor)
 
         raise RuntimeError("No graph captured. Call capture() first.")
@@ -486,6 +489,8 @@ class BridgedCUDAGraph:
 
     def _maybe_validate(self, graph_output, input_tensor):
         """In validation mode, compare graph output vs eager (PyTorch #155684)."""
+        if _HOT_REPLAY_MODE:
+            return graph_output
         validation_enabled = self._validation_enabled_cached
 
         if not validation_enabled or self._model_fn is None or input_tensor is None:

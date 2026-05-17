@@ -95,3 +95,18 @@ def test_cached_adaptive_decision_sets_preferred_eager():
     g._maybe_load_cached_decision(None, t)
     assert g._prefer_eager is True
     assert g._adaptive_disabled is True
+
+
+def test_hot_replay_mode_bypasses_validation():
+    original_hot_mode = graph_manager._HOT_REPLAY_MODE
+    graph_manager._HOT_REPLAY_MODE = True
+    try:
+        g = BridgedCUDAGraph()
+        g._validation_enabled_cached = True
+        g._model_fn = MagicMock()
+        graph_output = object()
+        out = g._maybe_validate(graph_output, MagicMock())
+        assert out is graph_output
+        g._model_fn.assert_not_called()
+    finally:
+        graph_manager._HOT_REPLAY_MODE = original_hot_mode
