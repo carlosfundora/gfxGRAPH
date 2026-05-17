@@ -27,6 +27,17 @@ def test_shape_bucket_pool():
         assert out.shape == (size, 64), f"Expected ({size}, 64), got {out.shape}"
         print(f"  Size {size} → bucket {pool.select_bucket(size)}: OK")
 
+    # Verify returned outputs stay valid when multiple outputs are retained.
+    retained = []
+    expected = []
+    with torch.no_grad():
+        for i in range(6):
+            x = torch.randn(7, 64, device="cuda") + float(i)
+            retained.append(pool(x))
+            expected.append(model_fn(x))
+    for got, exp in zip(retained, expected):
+        assert torch.allclose(got, exp, atol=1e-4, rtol=1e-3)
+
     print("  test_shape_bucket_pool PASSED")
 
 

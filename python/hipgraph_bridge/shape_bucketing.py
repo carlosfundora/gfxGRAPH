@@ -12,6 +12,7 @@ Hardened with:
 """
 
 import bisect
+import weakref
 
 try:
     import gfxgraph_rs as _gfxgraph_rs
@@ -32,6 +33,8 @@ except ImportError:
     _bump = None
 
 _log = logging.getLogger("gfxgraph")
+if _gfxgraph_rs is not None and not _HAS_BUCKET_ROUTER:
+    _log.warning("gfxgraph_rs loaded without BucketRouter; using Python router fallback")
 
 # Configurable VRAM cap (fraction, 0.0-1.0). Default: 80%.
 _VRAM_CAP = float(os.environ.get("GFXGRAPH_VRAM_CAP", "0.80"))
@@ -80,6 +83,11 @@ class ShapeBucketPool:
         self._graphs = {}      # bucket_size → CUDAGraph
         self._max_static_input = None
         self._static_outputs = {}  # bucket_size → static output tensor
+        # Clone-free output materialization ring (automatic, no user config).
+        self._output_slots = {}      # bucket_size -> List[Tensor]
+        self._output_slot_refs = {}  # bucket_size -> List[weakref | None]
+        self._output_slot_cursor = {}  # bucket_size -> next slot index
+        self._copy_fastpath_disabled = set()  # bucket sizes forced to clone fallback
         self._mempool = torch.cuda.graph_pool_handle()
 
         if warmup and model_fn is not None:
@@ -178,6 +186,7 @@ class ShapeBucketPool:
 
             self._graphs[bucket_size] = graph
             self._static_outputs[bucket_size] = static_output
+            self._init_output_ring(bucket_size, static_output)
             self._mark_warmed_up(bucket_size)
             _log.debug("Captured graph for bucket size %d", bucket_size)
             return True
@@ -258,8 +267,76 @@ class ShapeBucketPool:
         # Replay
         self._graphs[bucket].replay()
 
-        # Slice output to actual size
-        return self._static_outputs[bucket][:input_size].clone()
+        return self._materialize_output(bucket, input_size)
+
+    def _ring_slot_count(self, static_output: torch.Tensor) -> int:
+        # Prefer 3 slots, but scale down under low free VRAM.
+        try:
+            bytes_per_slot = static_output.nelement() * static_output.element_size()
+        except Exception:
+            return 1
+        free, _ = _vram_available()
+        if free <= 0:
+            return 2
+        if free >= bytes_per_slot * 8:
+            return 3
+        if free >= bytes_per_slot * 4:
+            return 2
+        return 1
+
+    def _init_output_ring(self, bucket_size: int, static_output):
+        if bucket_size in self._output_slots:
+            return
+        if not isinstance(static_output, torch.Tensor):
+            self._copy_fastpath_disabled.add(bucket_size)
+            self._output_slots[bucket_size] = []
+            self._output_slot_refs[bucket_size] = []
+            self._output_slot_cursor[bucket_size] = 0
+            return
+        slot_count = self._ring_slot_count(static_output)
+        slots = [torch.empty_like(static_output) for _ in range(slot_count)]
+        refs = [None] * slot_count
+        self._output_slots[bucket_size] = slots
+        self._output_slot_refs[bucket_size] = refs
+        self._output_slot_cursor[bucket_size] = 0
+
+    def _materialize_output(self, bucket_size: int, input_size: int):
+        static_out = self._static_outputs[bucket_size]
+        if not isinstance(static_out, torch.Tensor):
+            return static_out
+
+        # Safe fallback for buckets where ring logic cannot be guaranteed.
+        if bucket_size in self._copy_fastpath_disabled:
+            return static_out[:input_size].clone()
+
+        slots = self._output_slots.get(bucket_size)
+        refs = self._output_slot_refs.get(bucket_size)
+        if not slots or refs is None:
+            return static_out[:input_size].clone()
+
+        n = len(slots)
+        cursor = self._output_slot_cursor.get(bucket_size, 0)
+        chosen = None
+        for i in range(n):
+            idx = (cursor + i) % n
+            ref = refs[idx]
+            if ref is None or ref() is None:
+                chosen = idx
+                break
+
+        # All slots currently referenced by caller => preserve correctness.
+        if chosen is None:
+            return static_out[:input_size].clone()
+
+        try:
+            slots[chosen].copy_(static_out)
+            result = slots[chosen][:input_size]
+            refs[chosen] = weakref.ref(result)
+            self._output_slot_cursor[bucket_size] = (chosen + 1) % n
+            return result
+        except Exception:
+            self._copy_fastpath_disabled.add(bucket_size)
+            return static_out[:input_size].clone()
 
     def _eager_fallback(self, input_tensor, input_size):
         """Run model eagerly when graph isn't available."""
@@ -292,6 +369,9 @@ class ShapeBucketPool:
             sz = out.nelement() * out.element_size()
             if sz > max_out: max_out = sz
         total += max_out
+        for slots in self._output_slots.values():
+            for slot in slots:
+                total += slot.nelement() * slot.element_size()
         return total
 
     @property
