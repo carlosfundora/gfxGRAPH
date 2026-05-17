@@ -49,6 +49,16 @@ jobs:
           assert health["native_bridge"] is False
           PY
 
+      - name: Real-world GPU integration tests (no mocks/skips)
+        run: |
+          /tmp/gfxgraph-root/bin/pip install --upgrade pytest
+          set -o pipefail
+          /tmp/gfxgraph-root/bin/python -m pytest -q -rs tests/test_torch_integration.py | tee /tmp/gfxgraph-rocm-integration.log
+          if grep -q "SKIPPED" /tmp/gfxgraph-rocm-integration.log; then
+            echo "Integration tests were skipped on ROCm runner; this masks real-world behavior."
+            exit 1
+          fi
+
       - name: Packaging smoke - python compatibility install
         run: |
           python -m venv --system-site-packages /tmp/gfxgraph-python

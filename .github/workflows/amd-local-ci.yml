@@ -102,14 +102,27 @@ jobs:
       - name: Python AMD visibility smoke
         run: |
           python - <<'PY'
-          import importlib.util
-          print('gfxgraph importable:', bool(importlib.util.find_spec('gfxgraph')))
-          try:
-              import torch
-              print('torch:', torch.__version__)
-              print('rocm/cuda available:', torch.cuda.is_available())
-              if torch.cuda.is_available():
-                  print('device:', torch.cuda.get_device_name(0))
-          except Exception as exc:
-              print('torch smoke skipped:', exc)
+          import sys
+          import torch
+          sys.path.insert(0, "python")
+          from hipgraph_bridge.graph_manager import BridgedCUDAGraph
+
+          print("torch:", torch.__version__)
+          assert type(torch.cuda.is_available).__name__ != "MagicMock", "torch.cuda.is_available is mocked in CI"
+          assert torch.cuda.is_available(), "ROCm/CUDA device is not available on AMD smoke runner"
+          print("device:", torch.cuda.get_device_name(0))
+
+          model = torch.nn.Linear(32, 32).cuda().eval()
+          x = torch.randn(8, 32, device="cuda")
+          with torch.no_grad():
+              _ = model(x)
+          torch.cuda.synchronize()
+
+          g = BridgedCUDAGraph()
+          with g.capture(model_fn=lambda t: model(t)):
+              g._static_output = model(x)
+          y = g.replay(input_tensor=x)
+          torch.cuda.synchronize()
+          assert y is not None
+          print("real-world graph smoke: OK")
           PY
