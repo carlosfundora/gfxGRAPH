@@ -1,6 +1,7 @@
 """
 End-to-end PyTorch integration test for gfxGRAPH.
 """
+import pytest
 import torch
 from hipgraph_bridge import BridgedCUDAGraph
 from hipgraph_bridge.shape_bucketing import ShapeBucketPool
@@ -10,8 +11,7 @@ from hipgraph_bridge.conditional import ConditionalGraph
 def test_shape_bucket_pool():
     """Test ShapeBucketPool with a simple model."""
     if getattr(torch, '__mock__', False) or type(torch.cuda.is_available).__name__ == 'MagicMock' or not getattr(torch.cuda, 'is_available', lambda: False)():
-        print("SKIP: no GPU")
-        return
+        pytest.skip("no GPU")
 
     model = torch.nn.Linear(64, 64).cuda().eval()
 
@@ -44,8 +44,7 @@ def test_shape_bucket_pool():
 def test_conditional_graph():
     """Test ConditionalGraph branch selection."""
     if getattr(torch, '__mock__', False) or type(torch.cuda.is_available).__name__ == 'MagicMock' or not getattr(torch.cuda, 'is_available', lambda: False)():
-        print("SKIP: no GPU")
-        return
+        pytest.skip("no GPU")
 
     def branch_a(x):
         return x * 2.0
@@ -74,8 +73,7 @@ def test_conditional_graph():
 def test_bridged_cuda_graph():
     """Test BridgedCUDAGraph standard capture."""
     if getattr(torch, '__mock__', False) or type(torch.cuda.is_available).__name__ == 'MagicMock' or not getattr(torch.cuda, 'is_available', lambda: False)():
-        print("SKIP: no GPU")
-        return
+        pytest.skip("no GPU")
 
     model = torch.nn.Linear(32, 32).cuda().eval()
     static_input = torch.randn(8, 32, device="cuda")

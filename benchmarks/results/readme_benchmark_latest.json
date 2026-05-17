@@ -1,32 +1,81 @@
 {
-  "timestamp_utc": "2026-05-17T05:01:02Z",
+  "timestamp_utc": "2026-05-17T05:21:41Z",
+  "commit_sha": "7285f027ed12db47034006f379809e560594448a",
+  "run_count": 3,
   "env": {
     "torch": "2.11.0+rocm7.2",
-    "device": "AMD Radeon RX 6700 XT"
+    "device": "AMD Radeon RX 6700 XT",
+    "rocm": {
+      "runtime_from_torch": "7.2.26015",
+      "driver_from_hipconfig": "7.2.26015-fc0010cf6a",
+      "runtime_from_rocminfo": "Runtime Version:         1.18"
+    },
+    "env": {
+      "HSA_OVERRIDE_GFX_VERSION": "10.3.0",
+      "PYTORCH_ROCM_ARCH": "gfx1030",
+      "GFXGRAPH": null,
+      "GFXGRAPH_VRAM_CAP": null,
+      "SGLANG_RDNA2_KERNELS": null,
+      "HIP_VISIBLE_DEVICES": null,
+      "CUDA_VISIBLE_DEVICES": null
+    }
   },
   "results": [
     {
       "workload": "decode_like_layernorm_gelu_chain_bs1_d1024",
       "iters": 2000,
-      "eager_ms_per_iter": 0.13960686149948742,
-      "graph_ms_per_iter": 0.1166512790005072,
-      "speedup_x": 1.1967880909293793,
+      "run_count": 3,
+      "eager_ms_per_iter": 0.13899878400115995,
+      "graph_ms_per_iter": 0.16554706449824153,
+      "eager_ms_per_iter_runs": [
+        0.13899878400115995,
+        0.14547776499966858,
+        0.1388843425011146
+      ],
+      "graph_ms_per_iter_runs": [
+        0.16554706449824153,
+        0.12553388200467452,
+        0.20705895699938992
+      ],
+      "speedup_x": 0.8396330337988954,
       "fallback": false
     },
     {
       "workload": "mlp_bs32_d1024",
       "iters": 1500,
-      "eager_ms_per_iter": 0.10125014399333547,
-      "graph_ms_per_iter": 0.10350988466719475,
-      "speedup_x": 0.9781688417379188,
+      "run_count": 3,
+      "eager_ms_per_iter": 0.09961273133133848,
+      "graph_ms_per_iter": 0.10113965933366369,
+      "eager_ms_per_iter_runs": [
+        0.09632005666693051,
+        0.09961273133133848,
+        0.10071620466381621
+      ],
+      "graph_ms_per_iter_runs": [
+        0.1015925253353392,
+        0.10113965933366369,
+        0.10013738199874449
+      ],
+      "speedup_x": 0.9849027768890558,
       "fallback": false
     },
     {
       "workload": "mlp_bs128_d2048",
       "iters": 300,
-      "eager_ms_per_iter": 0.6138835333210105,
-      "graph_ms_per_iter": 0.6160678567054371,
-      "speedup_x": 0.9964544110512311,
+      "run_count": 3,
+      "eager_ms_per_iter": 0.6071261933539063,
+      "graph_ms_per_iter": 0.6020977100221595,
+      "eager_ms_per_iter_runs": [
+        0.6023589366911134,
+        0.6071261933539063,
+        0.6094512567021108
+      ],
+      "graph_ms_per_iter_runs": [
+        0.6098685433486631,
+        0.6020977100221595,
+        0.6008569499924002
+      ],
+      "speedup_x": 1.0083516068040879,
       "fallback": false
     }
   ]

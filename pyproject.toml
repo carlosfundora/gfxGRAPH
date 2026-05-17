@@ -11,6 +11,22 @@ requires-python = ">=3.12"
 license = {text = "MIT"}
 authors = [{name = "Carlos Fundora"}]
 dependencies = ["torch>=2.9"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: System :: Distributed Computing",
+]
+
+[project.urls]
+Homepage = "https://github.com/carlosfundora/gfxGRAPH"
+Repository = "https://github.com/carlosfundora/gfxGRAPH"
+Issues = "https://github.com/carlosfundora/gfxGRAPH/issues"
+Documentation = "https://github.com/carlosfundora/gfxGRAPH/tree/main/docs"
 
 [project.scripts]
 gfxgraph = "gfxgraph.__main__:main"

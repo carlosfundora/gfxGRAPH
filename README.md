@@ -351,6 +351,7 @@ Run:
 
 ```bash
 PYTHONPATH=python python benchmarks/bench_readme_public.py \
+  --run-count 3 \
   --output benchmarks/results/readme_benchmark_latest.json
 ```
 
@@ -358,14 +359,14 @@ Results from `benchmarks/results/readme_benchmark_latest.json`:
 
 | Workload | Eager (ms/iter) | Graph (ms/iter) | Speedup |
 |---|---:|---:|---:|
-| decode_like_layernorm_gelu_chain_bs1_d1024 | 0.1396 | **0.1167** | **1.20x** |
-| mlp_bs32_d1024 | 0.1013 | 0.1035 | 0.98x |
-| mlp_bs128_d2048 | 0.6139 | 0.6161 | 1.00x |
+| decode_like_layernorm_gelu_chain_bs1_d1024 | 0.1390 | 0.1655 | 0.84x |
+| mlp_bs32_d1024 | 0.0996 | 0.1011 | 0.98x |
+| mlp_bs128_d2048 | 0.6071 | **0.6021** | **1.01x** |
 
 Interpretation:
-- gfxGRAPH currently shows the strongest gains on launch-bound decode-like chains.
-- For heavier throughput-bound GEMM paths, replay is near parity in this environment.
+- Replay remains near parity overall in this environment, with workload-dependent wins/losses.
 - All measured runs above completed with `fallback: false` (successful graph replay path).
+- Benchmark JSON now captures provenance (`commit_sha`), ROCm runtime/driver hints, tracked environment variables, and repeated run samples for reproducibility.
 
 ---
 
@@ -373,6 +374,8 @@ Interpretation:
 
 - [Design Specification](docs/hipgraph-bridge-design.md)
 - [CUDA Parity Matrix](docs/torch-hip-rocm-graph.md)
+- [Changelog](CHANGELOG.md)
+- [Security Policy](SECURITY.md)
 
 ## License
 
