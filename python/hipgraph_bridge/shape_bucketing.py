@@ -90,19 +90,32 @@ class ShapeBucketPool:
         self._copy_fastpath_disabled = set()  # bucket sizes forced to clone fallback
         self._mempool = torch.cuda.graph_pool_handle()
 
+        self._cached_vram = None
+
         if warmup and model_fn is not None:
             self._warmup_all()
 
+    def _get_vram(self) -> tuple:
+        if self._cached_vram is not None:
+            return self._cached_vram
+        return _vram_available()
+
     def _warmup_all(self):
         """Pre-capture graphs for all bucket sizes (respects VRAM cap)."""
-        if not self._check_vram():
-            return
-        for size in self.buckets:
-            self._capture_bucket(size, skip_vram_check=True)
+        self._cached_vram = _vram_available()
+        try:
+            if not self._check_vram():
+                return
+            for i, size in enumerate(self.buckets):
+                if i > 0 and i % 5 == 0:
+                    self._cached_vram = _vram_available()
+                self._capture_bucket(size, skip_vram_check=True)
+        finally:
+            self._cached_vram = None
 
     def _check_vram(self) -> bool:
         """Return True if we have headroom below the VRAM cap."""
-        free, total = _vram_available()
+        free, total = self._get_vram()
         if total == 0:
             return True  # can't check — allow capture
         used_frac = 1.0 - (free / total)
@@ -154,12 +167,18 @@ class ShapeBucketPool:
             return False
         if self.model_fn is None:
             return False
-        if not skip_vram_check and not self._check_vram():
-            return False
 
-        device = torch.device("cuda")
+        clear_cache = False
+        if self._cached_vram is None:
+            self._cached_vram = _vram_available()
+            clear_cache = True
 
         try:
+            if not skip_vram_check and not self._check_vram():
+                return False
+
+            device = torch.device("cuda")
+
             # Check if we need to initialize or resize the shared max static input
             max_bucket = self.buckets[-1]
             if self._max_static_input is None:
@@ -201,6 +220,9 @@ class ShapeBucketPool:
             self._static_outputs.pop(bucket_size, None)
             self._graphs.pop(bucket_size, None)
             return False
+        finally:
+            if clear_cache:
+                self._cached_vram = None
 
     def route_bucket(self, input_size: int) -> Tuple[int, int]:
         """Find the smallest bucket >= input_size and return its current state.
@@ -275,7 +297,7 @@ class ShapeBucketPool:
             bytes_per_slot = static_output.nelement() * static_output.element_size()
         except Exception:
             return 1
-        free, _ = _vram_available()
+        free, _ = self._get_vram()
         if free <= 0:
             return 2
         if free >= bytes_per_slot * 8:
