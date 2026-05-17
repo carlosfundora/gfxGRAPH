@@ -4,8 +4,7 @@
 
 # gfxGRAPH v0.3.1
 
-Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2). gfxGRAPH bridges all 4 CUDA Graph parity gaps on ROCm, enabling transparent
-graph capture/replay with eager fallback, VRAM safety, and validation.
+Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2). gfxGRAPH provides production-safe graph capture/replay with eager fallback, dynamic-shape bucketing, validation, and optional native acceleration paths.
 
 ## At a Glance
 
@@ -23,7 +22,7 @@ graph capture/replay with eager fallback, VRAM safety, and validation.
 - [Architecture](#architecture)
 - [Observability](#observability)
 - [Troubleshooting](#troubleshooting)
-- [Performance](#performance-sglang--gemlite-awq-7b-bs1-gfx1030)
+- [Current Capabilities & Performance](#current-capabilities--performance-v031)
 - [Documentation](#documentation)
 - [License](#license)
 
@@ -44,7 +43,7 @@ If you just want gfxGRAPH working with the fewest moving parts, start with Tier 
 
 ```bash
 # Install PyTorch ROCm build
-pip install torch --index-url https://download.pytorch.org/whl/rocm6.2  # or your ROCm version
+pip install torch --index-url https://download.pytorch.org/whl/rocm7.2
 
 # Install gfxGRAPH from repo root
 pip install /path/to/gfxGRAPH
@@ -84,7 +83,7 @@ transparently on RDNA2.
 | Tier | Install Style | What You Get | Best For |
 |------|---------------|--------------|----------|
 | **Tier 1** | Pure Python | Monkey-patch, eager fallback, shape bucketing, validation, stats, health checks | Most users getting started |
-| **Tier 2** | Python + native companion | Native HIP Graph gap bridges and full parity path | Users who need the native-only gaps |
+| **Tier 2** | Python + native companion | Native acceleration paths for routing, validation, and conditional helpers | Users who want lower Python overhead where available |
 
 ### Tier 1: Python-Only Mode
 
@@ -101,7 +100,7 @@ transparently on RDNA2.
 **Dependencies:**
 ```bash
 # That's it — just PyTorch (ROCm build) and Python
-pip install torch --index-url https://download.pytorch.org/whl/rocm6.2  # or your ROCm version
+pip install torch --index-url https://download.pytorch.org/whl/rocm7.2
 ```
 
 **Install gfxGRAPH:**
@@ -126,9 +125,9 @@ features work without the native library.
 This is the advanced path and requires the ROCm SDK.
 
 **What you get additionally:**
-- C-level HIP Graph gap bridges (conditional nodes, device-side launch, nested capture)
-- `libhipgraph_bridge.so` — loaded automatically when present
-- Full 54/54 CUDA Graph parity matrix (vs 50/54 Python-only)
+- Native helper paths for selected bridge components (`gfxgraph_rs`, `gfxgraph_stats`)
+- Optional `libhipgraph_bridge.so` loading when present
+- Lower Python overhead on supported paths
 
 **System dependencies (Ubuntu/Debian):**
 ```bash
@@ -270,20 +269,20 @@ GFXGRAPH=validate python3 my_script.py # correctness checking
 
 ### Gaps Bridged
 
-| # | Gap | Bridge Strategy | Perf | Tier |
-|:-:|-----|----------------|:----:|:----:|
-| 51 | Conditional nodes | Per-branch dispatch (Python) / `hipGraphNodeSetEnabled` (native) | ~90% | 1/2 |
-| 52 | Device-side launch | `hipGraphUpload` + rapid host pipeline | ~95% | 2 |
-| 53 | Dynamic input shapes | Shape bucketing + param update | ~90-95% | 1 |
-| 54 | Nested capture | Sequential capture + child graph nodes | ~95% | 2 |
+| # | Gap | Bridge Strategy | Availability |
+|:-:|-----|----------------|:------------:|
+| 51 | Conditional nodes | Per-branch graph dispatch with eager fallback | Tier 1/2 |
+| 52 | Device-side launch | Native launch-path helpers when bridge library is present | Tier 2 |
+| 53 | Dynamic input shapes | Shape bucketing with VRAM-aware capture + replay | Tier 1/2 |
+| 54 | Nested capture | Native nested-capture support when bridge library is present | Tier 2 |
 
 ### Routing Strategy
 
-| Tier | Stack | Capabilities |
-|:----:|-------|:------------:|
-| 0 | `torch.compile` only | 31/54 |
-| 1 | HIP Graph + gfxGRAPH (Python-only) | 52/54 |
-| 2 | HIP Graph + gfxGRAPH (full native) | **54/54** |
+| Tier | Stack | Intent |
+|:----:|-------|:------:|
+| 0 | `torch.compile` only | Baseline compiler path |
+| 1 | HIP Graph + gfxGRAPH (Python-only) | Default production path |
+| 2 | HIP Graph + gfxGRAPH (+ native companion) | Lower-overhead helper paths where available |
 
 ---
 
@@ -359,9 +358,9 @@ Results from `benchmarks/results/readme_benchmark_latest.json`:
 
 | Workload | Eager (ms/iter) | Graph (ms/iter) | Speedup |
 |---|---:|---:|---:|
-| decode_like_layernorm_gelu_chain_bs1_d1024 | 0.1404 | **0.1204** | **1.17x** |
-| mlp_bs32_d1024 | 0.1017 | 0.1038 | 0.98x |
-| mlp_bs128_d2048 | 0.6184 | 0.6190 | 1.00x |
+| decode_like_layernorm_gelu_chain_bs1_d1024 | 0.1396 | **0.1167** | **1.20x** |
+| mlp_bs32_d1024 | 0.1013 | 0.1035 | 0.98x |
+| mlp_bs128_d2048 | 0.6139 | 0.6161 | 1.00x |
 
 Interpretation:
 - gfxGRAPH currently shows the strongest gains on launch-bound decode-like chains.
