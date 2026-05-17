@@ -359,16 +359,25 @@ PYTHONPATH=python python benchmarks/bench_readme_public.py \
   --output benchmarks/results/readme_benchmark_latest.json
 ```
 
-Results from `benchmarks/results/readme_benchmark_latest.json`:
+Results from `benchmarks/results/readme_benchmark_latest.json` (**standard mode**):
 
 | Workload | Eager (ms/iter) | Graph (ms/iter) | Speedup |
 |---|---:|---:|---:|
-| decode_like_layernorm_gelu_chain_bs1_d1024 | 0.1390 | 0.1655 | 0.84x |
-| mlp_bs32_d1024 | 0.0996 | 0.1011 | 0.98x |
-| mlp_bs128_d2048 | 0.6071 | **0.6021** | **1.01x** |
+| decode_like_layernorm_gelu_chain_bs1_d1024 | 0.1455 | 0.1835 | 0.79x |
+| mlp_bs32_d1024 | 0.1027 | 0.1032 | 0.99x |
+| mlp_bs128_d2048 | 0.6140 | **0.6134** | **1.00x** |
+
+Optional with `GFXGRAPH_REPLAY_HOT_MODE=1`:
+
+| Workload | Eager (ms/iter) | Graph (ms/iter) | Speedup |
+|---|---:|---:|---:|
+| decode_like_layernorm_gelu_chain_bs1_d1024 | 0.1327 | **0.1223** | **1.08x** |
+| mlp_bs32_d1024 | 0.1021 | 0.1022 | 1.00x |
+| mlp_bs128_d2048 | 0.6100 | 0.6124 | 1.00x |
 
 Interpretation:
-- Replay remains near parity overall in this environment, with workload-dependent wins/losses.
+- Standard mode remains near parity overall in this environment, with decode-like chains still sensitive to replay overhead.
+- Hot replay mode is the recommended low-overhead path when you want stronger decode-like latency gains.
 - All measured runs above completed with `fallback: false` (successful graph replay path).
 - Benchmark JSON now captures provenance (`commit_sha`), ROCm runtime/driver hints, tracked environment variables, and repeated run samples for reproducibility.
 
