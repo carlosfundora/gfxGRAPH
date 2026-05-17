@@ -1,3 +1,6 @@
 ## 2024-05-24 - Module Level Import Caching for Observability
 **Learning:** In highly-frequent code paths (like `_bump_capture()`, `_bump_fallback()`, `_record_replay()` called on every graph capture/replay), doing an inline `try: from gfxgraph._enable import ... except ImportError:` takes ~1.1µs per call. Caching the imported function at module level drops this to ~0.16µs. While `gfxGRAPH`'s design requires `hipgraph_bridge` to be importable without `gfxgraph` (hence the try/except), we can do this caching safely at the module level.
 **Action:** Replace inline imports in hot-path counters with module-level cached functions that handle the missing dependency gracefully.
+## 2024-05-24 - Module Level Import Caching for Rust Extensions
+**Learning:** Similar to Python module imports, inline `try: import gfxgraph_rs ... except ImportError:` in hot paths (like `_maybe_validate`) adds measurable overhead even when the module is present. Raising and catching `ImportError` on every call if the module is missing is even worse.
+**Action:** Always cache the availability of optional C/Rust extensions using module-level boolean flags (e.g., `_HAS_RUST_EXT = True/False`) and check the flag in hot paths instead of performing inline imports.

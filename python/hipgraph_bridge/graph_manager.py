@@ -31,6 +31,12 @@ try:
 except ImportError:
     _get_validate_mode = None
 
+try:
+    import gfxgraph_rs
+    _HAS_RUST_EXT = True
+except ImportError:
+    _HAS_RUST_EXT = False
+
 _log = logging.getLogger("gfxgraph")
 
 # Capture the original CUDAGraph class BEFORE monkey-patching replaces it.
@@ -267,12 +273,9 @@ class BridgedCUDAGraph:
         if not validation_enabled or self._model_fn is None or input_tensor is None:
             return graph_output
 
-        try:
-            import gfxgraph_rs
+        if _HAS_RUST_EXT:
             validator = gfxgraph_rs.BridgedGraphValidator(validation_enabled)
             return validator.maybe_validate(graph_output, input_tensor, self._model_fn)
-        except ImportError:
-            pass
 
         _log.debug("Validation: comparing graph output vs eager")
         with torch.no_grad():
