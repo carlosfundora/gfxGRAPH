@@ -101,3 +101,51 @@ def test_hot_replay_mode_bypasses_validation():
         g._model_fn.assert_not_called()
     finally:
         graph_manager._HOT_REPLAY_MODE = original_hot_mode
+
+
+def test_trusted_replay_promotes_and_skips_non_sampled_diagnostics():
+    original_hot_mode = graph_manager._HOT_REPLAY_MODE
+    original_threshold = graph_manager._TRUSTED_REPLAY_THRESHOLD
+    original_interval = graph_manager._TRUSTED_REPLAY_SAMPLE_INTERVAL
+    graph_manager._HOT_REPLAY_MODE = False
+    graph_manager._TRUSTED_REPLAY_THRESHOLD = 2
+    graph_manager._TRUSTED_REPLAY_SAMPLE_INTERVAL = 3
+    try:
+        g = BridgedCUDAGraph()
+        g._graph = MagicMock()
+        g._static_output = object()
+        g._record_replay_sample = MagicMock()
+        g._maybe_validate = MagicMock(side_effect=lambda out, _: out)
+
+        out1 = g.replay()
+        out2 = g.replay()
+        out3 = g.replay()
+
+        assert out1 is g._static_output
+        assert out2 is g._static_output
+        assert out3 is g._static_output
+        assert g._trusted_replay_active is True
+        # replay #3 in trusted mode is not a sampled replay with interval=3
+        assert g._record_replay_sample.call_count == 2
+        assert g._maybe_validate.call_count == 2
+    finally:
+        graph_manager._HOT_REPLAY_MODE = original_hot_mode
+        graph_manager._TRUSTED_REPLAY_THRESHOLD = original_threshold
+        graph_manager._TRUSTED_REPLAY_SAMPLE_INTERVAL = original_interval
+
+
+def test_trusted_replay_keeps_fallback_on_replay_error():
+    original_hot_mode = graph_manager._HOT_REPLAY_MODE
+    graph_manager._HOT_REPLAY_MODE = False
+    try:
+        g = BridgedCUDAGraph()
+        mock_graph = MagicMock()
+        mock_graph.replay.side_effect = RuntimeError("boom")
+        g._graph = mock_graph
+        g._model_fn = MagicMock(return_value="eager")
+        out = g.replay()
+        assert out == "eager"
+        assert g._eager_fallback is True
+        g._model_fn.assert_called_once()
+    finally:
+        graph_manager._HOT_REPLAY_MODE = original_hot_mode

@@ -50,6 +50,8 @@ _ADAPTIVE_SIGNATURE_CACHE_MAX = max(32, int(os.environ.get("GFXGRAPH_ADAPTIVE_SI
 _ADAPTIVE_SPIKE_SWITCH_FACTOR = max(1.0, float(os.environ.get("GFXGRAPH_ADAPTIVE_SPIKE_SWITCH_FACTOR", "1.20")))
 _ADAPTIVE_SPIKE_SWITCH_HITS = max(1, int(os.environ.get("GFXGRAPH_ADAPTIVE_SPIKE_SWITCH_HITS", "2")))
 _HOT_REPLAY_MODE = os.environ.get("GFXGRAPH_REPLAY_HOT_MODE", "").strip() in {"1", "true", "TRUE", "yes", "on"}
+_TRUSTED_REPLAY_THRESHOLD = max(0, int(os.environ.get("GFXGRAPH_TRUSTED_REPLAY_THRESHOLD", "16")))
+_TRUSTED_REPLAY_SAMPLE_INTERVAL = max(1, int(os.environ.get("GFXGRAPH_TRUSTED_REPLAY_SAMPLE_INTERVAL", "16")))
 _ADAPTIVE_SIGNATURE_CACHE_LOCK = threading.Lock()
 _ADAPTIVE_SIGNATURE_CACHE = {}
 
@@ -105,6 +107,8 @@ class BridgedCUDAGraph:
         self._adaptive_signature = None
         self._eager_baseline_us = None
         self._adaptive_graph_spikes = 0
+        self._trusted_replay_active = False
+        self._trusted_replay_count = 0
 
     # ---- PyTorch CUDAGraph low-level API compatibility ----
     # These methods make BridgedCUDAGraph a true drop-in for torch.cuda.CUDAGraph.
@@ -260,6 +264,8 @@ class BridgedCUDAGraph:
         self._adaptive_signature = None
         self._eager_baseline_us = None
         self._adaptive_graph_spikes = 0
+        self._trusted_replay_active = False
+        self._trusted_replay_count = 0
         return self._CaptureContext(
             self, dynamic_shapes, buckets, conditional_branches
         )
@@ -296,7 +302,10 @@ class BridgedCUDAGraph:
             if _HOT_REPLAY_MODE:
                 self._graph.replay()
                 return self._static_output
-            t0 = time.perf_counter()
+            sample_diagnostics = True
+            if _TRUSTED_REPLAY_THRESHOLD > 0 and self._trusted_replay_active:
+                sample_diagnostics = (self._trusted_replay_count % _TRUSTED_REPLAY_SAMPLE_INTERVAL) == 0
+            t0 = time.perf_counter() if sample_diagnostics else 0.0
             try:
                 self._graph.replay()
             except Exception as e:
@@ -304,10 +313,18 @@ class BridgedCUDAGraph:
                 self._eager_fallback = True
                 _bump_fallback()
                 return self._run_eager(input_tensor)
-            if not _HOT_REPLAY_MODE:
+            self._trusted_replay_count += 1
+            if (
+                _TRUSTED_REPLAY_THRESHOLD > 0
+                and not self._trusted_replay_active
+                and self._trusted_replay_count >= _TRUSTED_REPLAY_THRESHOLD
+            ):
+                self._trusted_replay_active = True
+            if sample_diagnostics:
                 self._record_replay_sample(t0)
                 self._maybe_update_adaptive_mode(input_tensor)
-            return self._maybe_validate(self._static_output, input_tensor)
+                return self._maybe_validate(self._static_output, input_tensor)
+            return self._static_output
 
         raise RuntimeError("No graph captured. Call capture() first.")
 
@@ -539,6 +556,8 @@ class BridgedCUDAGraph:
         self._adaptive_signature = None
         self._eager_baseline_us = None
         self._adaptive_graph_spikes = 0
+        self._trusted_replay_active = False
+        self._trusted_replay_count = 0
 
     # ---- Additional CUDAGraph API stubs (future-proofing) ----
 

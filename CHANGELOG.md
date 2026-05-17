@@ -7,6 +7,7 @@ All notable changes to this project are documented in this file.
 ### Added
 - Added adaptive replay signature winner caching so eager/graph decisions are reused across graph instances with matching workload signatures.
 - Added replay hot mode (`GFXGRAPH_REPLAY_HOT_MODE=1`) to bypass replay-path diagnostics for lower per-replay overhead.
+- Added trusted standard-mode replay promotion with sampled diagnostics (`GFXGRAPH_TRUSTED_REPLAY_THRESHOLD`, `GFXGRAPH_TRUSTED_REPLAY_SAMPLE_INTERVAL`), while preserving eager fallback on replay failure.
 
 ### Changed
 - Refreshed README benchmark tables and benchmark artifact with latest standard-mode and hot-mode measurements.
