@@ -293,6 +293,9 @@ class BridgedCUDAGraph:
 
         # Standard graph replay
         if self._graph is not None:
+            if _HOT_REPLAY_MODE:
+                self._graph.replay()
+                return self._static_output
             t0 = time.perf_counter()
             try:
                 self._graph.replay()

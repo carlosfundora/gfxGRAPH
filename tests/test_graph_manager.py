@@ -1,13 +1,4 @@
-import sys
 from unittest.mock import MagicMock, patch
-
-# Mock torch before importing BridgedCUDAGraph
-mock_torch = MagicMock()
-sys.modules["torch"] = mock_torch
-sys.modules["torch.cuda"] = mock_torch.cuda
-
-# Mock hipgraph_bridge.shape_bucketing
-sys.modules["hipgraph_bridge.shape_bucketing"] = MagicMock()
 
 import hipgraph_bridge.graph_manager as graph_manager
 from hipgraph_bridge.graph_manager import BridgedCUDAGraph
