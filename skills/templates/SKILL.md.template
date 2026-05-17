@@ -1,0 +1,26 @@
+---
+name: skill-name
+description: A concise description of the skill's purpose and usage triggers.
+---
+
+# Skill Name
+
+**Goal**
+State the outcome the skill is meant to achieve.
+
+## When to use this skill
+- Trigger condition 1
+- Trigger condition 2
+
+## Do not use this skill for
+- A related task handled by another skill.
+- Actions that would mutate state before readiness is confirmed.
+
+## How to use it
+1. Step 1
+2. Step 2
+3. Step 3
+
+## Notes
+- Keep the scope narrow.
+- Include explicit fallback or stop conditions when needed.
