@@ -1,0 +1,33 @@
+{
+  "timestamp_utc": "2026-05-17T04:52:33Z",
+  "env": {
+    "torch": "2.11.0+rocm7.2",
+    "device": "AMD Radeon RX 6700 XT"
+  },
+  "results": [
+    {
+      "workload": "decode_like_layernorm_gelu_chain_bs1_d1024",
+      "iters": 2000,
+      "eager_ms_per_iter": 0.14044622350047575,
+      "graph_ms_per_iter": 0.12037483200401766,
+      "speedup_x": 1.1667407643467214,
+      "fallback": false
+    },
+    {
+      "workload": "mlp_bs32_d1024",
+      "iters": 1500,
+      "eager_ms_per_iter": 0.10171220266299012,
+      "graph_ms_per_iter": 0.10382930599735118,
+      "speedup_x": 0.9796097709213709,
+      "fallback": false
+    },
+    {
+      "workload": "mlp_bs128_d2048",
+      "iters": 300,
+      "eager_ms_per_iter": 0.6184010033515127,
+      "graph_ms_per_iter": 0.6190079199829294,
+      "speedup_x": 0.9990195333341882,
+      "fallback": false
+    }
+  ]
+}

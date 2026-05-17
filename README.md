@@ -337,15 +337,36 @@ Build `libhipgraph_bridge.so` (see Tier 2 above) only if you need the 2 extra na
 
 ---
 
-## Performance (SGLang + GemLite AWQ 7B, bs=1, gfx1030)
+## Current Capabilities & Performance (v0.3.1)
 
-| Config | Decode t/s | Prefill t/s | VRAM |
-|--------|-----------|-------------|------|
-| GemLite AWQ + gfxGRAPH | **36.82** | 644.06 | 5.58 GB |
-| GemLite AWQ, no graphs | 23.31 | 640.84 | 5.58 GB |
-| **Improvement** | **+58%** | +0.5% | — |
+### Verified capability snapshot
 
-CUDA graphs primarily accelerate decode (kernel launch overhead dominates at bs=1).
+- `BridgedCUDAGraph` capture/replay works on gfx1030 with eager fallback safety.
+- Dynamic-shape `ShapeBucketPool` capture/replay works across bucketed batch sizes.
+- `ConditionalGraph` branch capture/replay works with fallback on per-branch failure.
+- Rust companion modules (`gfxgraph_rs`, `gfxgraph_stats`) are optional, but when present they are used for router/validator/stats fast paths.
+
+### Public benchmark (RX 6700 XT / gfx1030, ROCm 7.2, torch 2.11.0+rocm7.2)
+
+Run:
+
+```bash
+PYTHONPATH=python python benchmarks/bench_readme_public.py \
+  --output benchmarks/results/readme_benchmark_latest.json
+```
+
+Results from `benchmarks/results/readme_benchmark_latest.json`:
+
+| Workload | Eager (ms/iter) | Graph (ms/iter) | Speedup |
+|---|---:|---:|---:|
+| decode_like_layernorm_gelu_chain_bs1_d1024 | 0.1404 | **0.1204** | **1.17x** |
+| mlp_bs32_d1024 | 0.1017 | 0.1038 | 0.98x |
+| mlp_bs128_d2048 | 0.6184 | 0.6190 | 1.00x |
+
+Interpretation:
+- gfxGRAPH currently shows the strongest gains on launch-bound decode-like chains.
+- For heavier throughput-bound GEMM paths, replay is near parity in this environment.
+- All measured runs above completed with `fallback: false` (successful graph replay path).
 
 ---
 
