@@ -34,7 +34,7 @@ graph capture/replay with eager fallback, VRAM safety, and validation.
 | **GPU** | AMD Radeon RX 6700 XT / 6800 / 6900 (gfx1030, RDNA2) |
 | **ROCm** | 7.2.0+ |
 | **PyTorch** | 2.9+ (ROCm build) |
-| **Python** | 3.10+ |
+| **Python** | 3.12+ |
 
 ## Quick Start
 
