@@ -14,10 +14,11 @@ Hardened with:
 import bisect
 
 try:
-    import gfxgraph_rs
-    _HAS_RUST_EXT = True
-except ImportError:
-    _HAS_RUST_EXT = False
+    import gfxgraph_rs as _gfxgraph_rs
+except Exception:
+    _gfxgraph_rs = None
+
+_HAS_BUCKET_ROUTER = _gfxgraph_rs is not None and hasattr(_gfxgraph_rs, "BucketRouter")
 
 import logging
 import os
@@ -67,8 +68,8 @@ class ShapeBucketPool:
 
         self.model_fn = model_fn
         self.buckets = sorted(buckets or [1, 2, 4, 8, 16, 32, 64])
-        if _HAS_RUST_EXT:
-            self._router = gfxgraph_rs.BucketRouter(self.buckets)
+        if _HAS_BUCKET_ROUTER:
+            self._router = _gfxgraph_rs.BucketRouter(self.buckets)
             self._warmed_up = None
             self._failed_buckets = None
         else:

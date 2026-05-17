@@ -17,10 +17,11 @@ import torch
 from typing import Callable, Dict, Optional
 
 try:
-    import gfxgraph_rs
-    _HAS_RUST_EXT = True
-except ImportError:
-    _HAS_RUST_EXT = False
+    import gfxgraph_rs as _gfxgraph_rs
+except Exception:
+    _gfxgraph_rs = None
+
+_HAS_CONDITIONAL_RUNNER = _gfxgraph_rs is not None and hasattr(_gfxgraph_rs, "ConditionalGraphRunner")
 
 try:
     from gfxgraph._enable import bump as _bump
@@ -111,8 +112,8 @@ class ConditionalGraph:
                 if _bump is not None:
                     _bump("fallback_count")
 
-        if _HAS_RUST_EXT:
-            self._rust_runner = gfxgraph_rs.ConditionalGraphRunner(
+        if _HAS_CONDITIONAL_RUNNER:
+            self._rust_runner = _gfxgraph_rs.ConditionalGraphRunner(
                 list(self._branches.keys()),
                 self._graphs,
                 self._static_outputs,

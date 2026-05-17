@@ -32,10 +32,11 @@ except ImportError:
     _get_validate_mode = None
 
 try:
-    import gfxgraph_rs
-    _HAS_RUST_EXT = True
-except ImportError:
-    _HAS_RUST_EXT = False
+    import gfxgraph_rs as _gfxgraph_rs
+except Exception:
+    _gfxgraph_rs = None
+
+_HAS_BRIDGED_VALIDATOR = _gfxgraph_rs is not None and hasattr(_gfxgraph_rs, "BridgedGraphValidator")
 
 _log = logging.getLogger("gfxgraph")
 
@@ -72,6 +73,7 @@ class BridgedCUDAGraph:
 
     def __init__(self):
         self._graph = None
+        self._capture_ctx = None
         self._shape_pool = None
         self._conditional_branches = None
         self._stream = None
@@ -127,7 +129,10 @@ class BridgedCUDAGraph:
             try:
                 self.parent._graph = _OriginalCUDAGraph()
                 torch.cuda.synchronize()
-                self.parent._graph.capture_begin()
+                self.parent._capture_ctx = torch.cuda.graph(
+                    self.parent._graph, stream=self.parent._stream
+                )
+                self.parent._capture_ctx.__enter__()
             except Exception as e:
                 _log.warning("Graph capture_begin failed: %s — using eager fallback", e)
                 # Sync before dropping reference to avoid C++ destructor crash
@@ -135,6 +140,7 @@ class BridgedCUDAGraph:
                     torch.cuda.synchronize()
                 except Exception:
                     pass
+                self.parent._capture_ctx = None
                 self.parent._graph = None
                 self.parent._eager_fallback = True
                 _bump_fallback()
@@ -154,7 +160,13 @@ class BridgedCUDAGraph:
                     exc_val,
                 )
                 graph = self.parent._graph
-                if graph is not None:
+                if self.parent._capture_ctx is not None:
+                    try:
+                        self.parent._capture_ctx.__exit__(exc_type, exc_val, exc_tb)
+                    except Exception:
+                        pass
+                    self.parent._capture_ctx = None
+                elif graph is not None:
                     # Try to properly end the capture so HIP state is clean
                     try:
                         graph.capture_end()
@@ -178,7 +190,11 @@ class BridgedCUDAGraph:
 
             if self.parent._graph is not None:
                 try:
-                    self.parent._graph.capture_end()
+                    if self.parent._capture_ctx is not None:
+                        self.parent._capture_ctx.__exit__(None, None, None)
+                        self.parent._capture_ctx = None
+                    else:
+                        self.parent._graph.capture_end()
                     _bump_capture()
                 except Exception as e:
                     _log.warning("capture_end failed: %s — using eager fallback", e)
@@ -187,6 +203,7 @@ class BridgedCUDAGraph:
                         torch.cuda.synchronize()
                     except Exception:
                         pass
+                    self.parent._capture_ctx = None
                     self.parent._graph = None
                     self.parent._eager_fallback = True
                     _bump_fallback()
@@ -253,6 +270,8 @@ class BridgedCUDAGraph:
     def _run_eager(self, input_tensor=None):
         """Execute model eagerly (fallback path)."""
         if self._model_fn is None:
+            if input_tensor is None and self._static_output is not None:
+                return self._static_output
             raise RuntimeError(
                 "Graph capture failed and no model_fn provided for eager fallback. "
                 "Pass model_fn= to capture() for automatic fallback."
@@ -273,8 +292,8 @@ class BridgedCUDAGraph:
         if not validation_enabled or self._model_fn is None or input_tensor is None:
             return graph_output
 
-        if _HAS_RUST_EXT:
-            validator = gfxgraph_rs.BridgedGraphValidator(validation_enabled)
+        if _HAS_BRIDGED_VALIDATOR:
+            validator = _gfxgraph_rs.BridgedGraphValidator(validation_enabled)
             return validator.maybe_validate(graph_output, input_tensor, self._model_fn)
 
         _log.debug("Validation: comparing graph output vs eager")
