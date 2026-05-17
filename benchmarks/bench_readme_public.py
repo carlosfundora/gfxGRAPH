@@ -91,7 +91,8 @@ def _bench_eager_vs_graph(
         eager_s = time.perf_counter() - t0
 
         g = BridgedCUDAGraph()
-        with g.capture(model_fn=fn):
+        eager_fn = lambda: fn(x)
+        with g.capture(model_fn=eager_fn):
             g._static_output = fn(x)
 
         for _ in range(warmup):

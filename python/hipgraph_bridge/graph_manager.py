@@ -10,6 +10,7 @@ Hardened with:
 """
 
 import logging
+import os
 import time
 
 import torch
@@ -39,6 +40,11 @@ except Exception:
 _HAS_BRIDGED_VALIDATOR = _gfxgraph_rs is not None and hasattr(_gfxgraph_rs, "BridgedGraphValidator")
 
 _log = logging.getLogger("gfxgraph")
+
+_ADAPTIVE_REPLAYS = max(0, int(os.environ.get("GFXGRAPH_ADAPTIVE_REPLAYS", "8")))
+_STATS_FLUSH_INTERVAL = max(1, int(os.environ.get("GFXGRAPH_REPLAY_STATS_FLUSH", "32")))
+_ADAPTIVE_EAGER_BIAS = max(1.0, float(os.environ.get("GFXGRAPH_ADAPTIVE_EAGER_BIAS", "1.10")))
+_ADAPTIVE_GRAPH_ADVANTAGE = min(1.0, max(0.5, float(os.environ.get("GFXGRAPH_ADAPTIVE_GRAPH_ADVANTAGE", "0.98"))))
 
 # Capture the original CUDAGraph class BEFORE monkey-patching replaces it.
 # This module is imported by gfxgraph.__init__ which happens before enable().
@@ -81,6 +87,14 @@ class BridgedCUDAGraph:
         self._model_fn = None       # stored for eager fallback
         self._eager_fallback = False  # set True on capture failure
         self._last_input = None      # for validation mode
+        self._prefer_eager = False
+        self._adaptive_replay_samples = 0
+        self._adaptive_graph_total_us = 0.0
+        self._adaptive_eager_total_us = 0.0
+        self._adaptive_disabled = False
+        self._validation_enabled_cached = False
+        self._replay_stat_buffer_count = 0
+        self._replay_stat_buffer_us = 0.0
 
     # ---- PyTorch CUDAGraph low-level API compatibility ----
     # These methods make BridgedCUDAGraph a true drop-in for torch.cuda.CUDAGraph.
@@ -225,6 +239,14 @@ class BridgedCUDAGraph:
             buckets = [1, 2, 4, 8, 16, 32, 64]
 
         self._model_fn = model_fn
+        self._prefer_eager = False
+        self._adaptive_replay_samples = 0
+        self._adaptive_graph_total_us = 0.0
+        self._adaptive_eager_total_us = 0.0
+        self._adaptive_disabled = False
+        self._replay_stat_buffer_count = 0
+        self._replay_stat_buffer_us = 0.0
+        self._validation_enabled_cached = bool(_get_validate_mode and _get_validate_mode())
         return self._CaptureContext(
             self, dynamic_shapes, buckets, conditional_branches
         )
@@ -244,12 +266,14 @@ class BridgedCUDAGraph:
         # Eager fallback path
         if self._eager_fallback:
             return self._run_eager(input_tensor)
+        if self._prefer_eager:
+            return self._run_preferred_eager(input_tensor)
 
         # Shape bucketing path
         if self._shape_pool is not None and batch_size is not None:
             t0 = time.perf_counter()
             result = self._shape_pool(batch_size)
-            _record_replay(t0)
+            self._record_replay_sample(t0)
             return self._maybe_validate(result, input_tensor)
 
         # Standard graph replay
@@ -262,7 +286,8 @@ class BridgedCUDAGraph:
                 self._eager_fallback = True
                 _bump_fallback()
                 return self._run_eager(input_tensor)
-            _record_replay(t0)
+            self._record_replay_sample(t0)
+            self._maybe_update_adaptive_mode(input_tensor)
             return self._maybe_validate(self._static_output, input_tensor)
 
         raise RuntimeError("No graph captured. Call capture() first.")
@@ -282,12 +307,93 @@ class BridgedCUDAGraph:
             return self._model_fn(input_tensor)
         return self._model_fn()
 
+    def _run_preferred_eager(self, input_tensor=None):
+        """Execute eager path selected by adaptive policy (non-fallback)."""
+        if input_tensor is not None:
+            return self._model_fn(input_tensor)
+        return self._model_fn()
+
+    def _run_eager_timed(self, input_tensor=None):
+        t0 = time.perf_counter()
+        with torch.no_grad():
+            if input_tensor is not None:
+                out = self._model_fn(input_tensor)
+            else:
+                out = self._model_fn()
+        us = (time.perf_counter() - t0) * 1e6
+        return out, us
+
+    def _maybe_update_adaptive_mode(self, input_tensor):
+        if _ADAPTIVE_REPLAYS <= 0 or self._adaptive_disabled or self._model_fn is None:
+            return
+        if self._adaptive_replay_samples >= _ADAPTIVE_REPLAYS:
+            return
+
+        try:
+            _, eager_us = self._run_eager_timed(input_tensor)
+        except TypeError:
+            # model_fn requires an input tensor, but replay caller did not provide one.
+            self._adaptive_disabled = True
+            return
+        except Exception as exc:
+            _log.debug("Adaptive eager probe failed: %s", exc)
+            self._adaptive_disabled = True
+            return
+
+        self._adaptive_eager_total_us += eager_us
+        self._adaptive_replay_samples += 1
+        if self._adaptive_replay_samples >= _ADAPTIVE_REPLAYS:
+            graph_total = self._adaptive_graph_total_us
+            eager_total = self._adaptive_eager_total_us
+            if graph_total <= (eager_total * _ADAPTIVE_GRAPH_ADVANTAGE):
+                self._prefer_eager = False
+                _log.debug(
+                    "Adaptive path kept graph: eager=%.2fus graph=%.2fus over %d samples (graph_adv=%.3f)",
+                    eager_total,
+                    graph_total,
+                    self._adaptive_replay_samples,
+                    _ADAPTIVE_GRAPH_ADVANTAGE,
+                )
+            elif eager_total <= (graph_total * _ADAPTIVE_EAGER_BIAS):
+                self._prefer_eager = True
+                _log.debug(
+                    "Adaptive path selected eager: eager=%.2fus graph=%.2fus over %d samples (bias=%.3f)",
+                    eager_total,
+                    graph_total,
+                    self._adaptive_replay_samples,
+                    _ADAPTIVE_EAGER_BIAS,
+                )
+            else:
+                self._prefer_eager = False
+                _log.debug(
+                    "Adaptive path kept graph: eager=%.2fus graph=%.2fus over %d samples",
+                    eager_total,
+                    graph_total,
+                    self._adaptive_replay_samples,
+                )
+
+    def _record_replay_sample(self, t0: float):
+        us = (time.perf_counter() - t0) * 1e6
+        self._adaptive_graph_total_us += us
+        self._replay_stat_buffer_us += us
+        self._replay_stat_buffer_count += 1
+        if self._replay_stat_buffer_count >= _STATS_FLUSH_INTERVAL:
+            self._flush_replay_stats()
+
+    def _flush_replay_stats(self):
+        if self._replay_stat_buffer_count == 0:
+            return
+        count = self._replay_stat_buffer_count
+        avg_us = self._replay_stat_buffer_us / count
+        if _record_replay_us is not None:
+            for _ in range(count):
+                _record_replay_us(avg_us)
+        self._replay_stat_buffer_count = 0
+        self._replay_stat_buffer_us = 0.0
+
     def _maybe_validate(self, graph_output, input_tensor):
         """In validation mode, compare graph output vs eager (PyTorch #155684)."""
-        if _get_validate_mode is not None:
-            validation_enabled = _get_validate_mode()
-        else:
-            validation_enabled = False
+        validation_enabled = self._validation_enabled_cached
 
         if not validation_enabled or self._model_fn is None or input_tensor is None:
             return graph_output
@@ -315,6 +421,7 @@ class BridgedCUDAGraph:
 
     def reset(self):
         """Release all resources."""
+        self._flush_replay_stats()
         self._graph = None
         self._shape_pool = None
         self._conditional_branches = None
@@ -322,6 +429,12 @@ class BridgedCUDAGraph:
         self._static_output = None
         self._model_fn = None
         self._eager_fallback = False
+        self._prefer_eager = False
+        self._adaptive_replay_samples = 0
+        self._adaptive_graph_total_us = 0.0
+        self._adaptive_eager_total_us = 0.0
+        self._adaptive_disabled = False
+        self._validation_enabled_cached = False
 
     # ---- Additional CUDAGraph API stubs (future-proofing) ----
 
