@@ -11,6 +11,7 @@ Hardened with:
 
 import logging
 import os
+import threading
 import time
 
 import torch
@@ -45,6 +46,11 @@ _ADAPTIVE_REPLAYS = max(0, int(os.environ.get("GFXGRAPH_ADAPTIVE_REPLAYS", "8"))
 _STATS_FLUSH_INTERVAL = max(1, int(os.environ.get("GFXGRAPH_REPLAY_STATS_FLUSH", "32")))
 _ADAPTIVE_EAGER_BIAS = max(1.0, float(os.environ.get("GFXGRAPH_ADAPTIVE_EAGER_BIAS", "1.10")))
 _ADAPTIVE_GRAPH_ADVANTAGE = min(1.0, max(0.5, float(os.environ.get("GFXGRAPH_ADAPTIVE_GRAPH_ADVANTAGE", "0.98"))))
+_ADAPTIVE_SIGNATURE_CACHE_MAX = max(32, int(os.environ.get("GFXGRAPH_ADAPTIVE_SIGNATURE_CACHE_MAX", "512")))
+_ADAPTIVE_SPIKE_SWITCH_FACTOR = max(1.0, float(os.environ.get("GFXGRAPH_ADAPTIVE_SPIKE_SWITCH_FACTOR", "1.20")))
+_ADAPTIVE_SPIKE_SWITCH_HITS = max(1, int(os.environ.get("GFXGRAPH_ADAPTIVE_SPIKE_SWITCH_HITS", "2")))
+_ADAPTIVE_SIGNATURE_CACHE_LOCK = threading.Lock()
+_ADAPTIVE_SIGNATURE_CACHE = {}
 
 # Capture the original CUDAGraph class BEFORE monkey-patching replaces it.
 # This module is imported by gfxgraph.__init__ which happens before enable().
@@ -95,6 +101,9 @@ class BridgedCUDAGraph:
         self._validation_enabled_cached = False
         self._replay_stat_buffer_count = 0
         self._replay_stat_buffer_us = 0.0
+        self._adaptive_signature = None
+        self._eager_baseline_us = None
+        self._adaptive_graph_spikes = 0
 
     # ---- PyTorch CUDAGraph low-level API compatibility ----
     # These methods make BridgedCUDAGraph a true drop-in for torch.cuda.CUDAGraph.
@@ -247,6 +256,9 @@ class BridgedCUDAGraph:
         self._replay_stat_buffer_count = 0
         self._replay_stat_buffer_us = 0.0
         self._validation_enabled_cached = bool(_get_validate_mode and _get_validate_mode())
+        self._adaptive_signature = None
+        self._eager_baseline_us = None
+        self._adaptive_graph_spikes = 0
         return self._CaptureContext(
             self, dynamic_shapes, buckets, conditional_branches
         )
@@ -266,6 +278,7 @@ class BridgedCUDAGraph:
         # Eager fallback path
         if self._eager_fallback:
             return self._run_eager(input_tensor)
+        self._maybe_load_cached_decision(batch_size, input_tensor)
         if self._prefer_eager:
             return self._run_preferred_eager(input_tensor)
 
@@ -328,6 +341,8 @@ class BridgedCUDAGraph:
             return
         if self._adaptive_replay_samples >= _ADAPTIVE_REPLAYS:
             return
+        if self._adaptive_signature is None:
+            self._adaptive_signature = self._build_adaptive_signature(None, input_tensor)
 
         try:
             _, eager_us = self._run_eager_timed(input_tensor)
@@ -371,12 +386,90 @@ class BridgedCUDAGraph:
                     graph_total,
                     self._adaptive_replay_samples,
                 )
+            if self._adaptive_signature is not None:
+                _set_adaptive_signature_decision(
+                    self._adaptive_signature,
+                    "eager" if self._prefer_eager else "graph",
+                    eager_total / self._adaptive_replay_samples,
+                    graph_total / self._adaptive_replay_samples,
+                )
+            self._eager_baseline_us = eager_total / self._adaptive_replay_samples
+
+    def _build_adaptive_signature(self, batch_size, input_tensor):
+        if self._model_fn is None:
+            return None
+
+        fn_obj = getattr(self._model_fn, "__func__", self._model_fn)
+        fn_module = getattr(fn_obj, "__module__", type(fn_obj).__module__)
+        fn_name = getattr(fn_obj, "__qualname__", getattr(fn_obj, "__name__", type(fn_obj).__name__))
+        fn_code = getattr(fn_obj, "__code__", None)
+        if fn_code is not None:
+            fn_sig = f"{fn_module}:{fn_name}:{fn_code.co_firstlineno}:{fn_code.co_argcount}:{len(fn_code.co_code)}"
+        else:
+            fn_sig = f"{fn_module}:{fn_name}:{type(fn_obj).__name__}"
+
+        ref_tensor = input_tensor
+        if ref_tensor is None and self._static_output is not None:
+            ref_tensor = self._static_output
+
+        shape = tuple(int(dim) for dim in getattr(ref_tensor, "shape", ())) if ref_tensor is not None else ()
+        dtype = str(getattr(ref_tensor, "dtype", "unknown")) if ref_tensor is not None else "unknown"
+        device = str(getattr(ref_tensor, "device", "unknown")) if ref_tensor is not None else "unknown"
+        stride_obj = getattr(ref_tensor, "stride", None) if ref_tensor is not None else None
+        if callable(stride_obj):
+            try:
+                stride = tuple(int(dim) for dim in stride_obj())
+            except Exception:
+                stride = ()
+        else:
+            stride = ()
+
+        batch_hint = batch_size
+        if batch_hint is None and shape:
+            batch_hint = shape[0]
+
+        return f"{fn_sig}|b={batch_hint}|shape={shape}|dtype={dtype}|device={device}|stride={stride}"
+
+    def _maybe_load_cached_decision(self, batch_size, input_tensor):
+        if self._adaptive_disabled:
+            return
+        if self._adaptive_signature is None:
+            self._adaptive_signature = self._build_adaptive_signature(batch_size, input_tensor)
+        if self._adaptive_signature is None:
+            return
+        cached = _get_adaptive_signature_decision(self._adaptive_signature)
+        if cached is None:
+            return
+        self._prefer_eager = cached.get("mode") == "eager"
+        self._adaptive_disabled = True
+        self._eager_baseline_us = cached.get("eager_avg_us")
 
     def _record_replay_sample(self, t0: float):
         us = (time.perf_counter() - t0) * 1e6
         self._adaptive_graph_total_us += us
         self._replay_stat_buffer_us += us
         self._replay_stat_buffer_count += 1
+        if not self._prefer_eager and self._eager_baseline_us:
+            if us > (self._eager_baseline_us * _ADAPTIVE_SPIKE_SWITCH_FACTOR):
+                self._adaptive_graph_spikes += 1
+                if self._adaptive_graph_spikes >= _ADAPTIVE_SPIKE_SWITCH_HITS:
+                    self._prefer_eager = True
+                    self._adaptive_disabled = True
+                    if self._adaptive_signature is not None:
+                        _set_adaptive_signature_decision(
+                            self._adaptive_signature,
+                            "eager",
+                            self._eager_baseline_us,
+                            us,
+                        )
+                    _log.debug(
+                        "Adaptive spike guard switched to eager: replay_us=%.2f baseline_us=%.2f factor=%.2f",
+                        us,
+                        self._eager_baseline_us,
+                        _ADAPTIVE_SPIKE_SWITCH_FACTOR,
+                    )
+            elif self._adaptive_graph_spikes > 0:
+                self._adaptive_graph_spikes -= 1
         if self._replay_stat_buffer_count >= _STATS_FLUSH_INTERVAL:
             self._flush_replay_stats()
 
@@ -435,6 +528,9 @@ class BridgedCUDAGraph:
         self._adaptive_eager_total_us = 0.0
         self._adaptive_disabled = False
         self._validation_enabled_cached = False
+        self._adaptive_signature = None
+        self._eager_baseline_us = None
+        self._adaptive_graph_spikes = 0
 
     # ---- Additional CUDAGraph API stubs (future-proofing) ----
 
@@ -486,3 +582,31 @@ def _record_replay(t0: float):
     if _record_replay_us is not None:
         us = (time.perf_counter() - t0) * 1e6
         _record_replay_us(us)
+
+
+def _set_adaptive_signature_decision(
+    signature: str,
+    decision: str,
+    eager_avg_us: float | None = None,
+    graph_avg_us: float | None = None,
+):
+    if not signature:
+        return
+    payload = {
+        "mode": decision,
+        "eager_avg_us": eager_avg_us,
+        "graph_avg_us": graph_avg_us,
+    }
+    with _ADAPTIVE_SIGNATURE_CACHE_LOCK:
+        if signature in _ADAPTIVE_SIGNATURE_CACHE:
+            _ADAPTIVE_SIGNATURE_CACHE.pop(signature, None)
+        _ADAPTIVE_SIGNATURE_CACHE[signature] = payload
+        while len(_ADAPTIVE_SIGNATURE_CACHE) > _ADAPTIVE_SIGNATURE_CACHE_MAX:
+            _ADAPTIVE_SIGNATURE_CACHE.pop(next(iter(_ADAPTIVE_SIGNATURE_CACHE)))
+
+
+def _get_adaptive_signature_decision(signature: str):
+    if not signature:
+        return None
+    with _ADAPTIVE_SIGNATURE_CACHE_LOCK:
+        return _ADAPTIVE_SIGNATURE_CACHE.get(signature)
