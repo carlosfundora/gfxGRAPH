@@ -42,6 +42,16 @@ _HAS_BRIDGED_VALIDATOR = _gfxgraph_rs is not None and hasattr(_gfxgraph_rs, "Bri
 
 _log = logging.getLogger("gfxgraph")
 
+def _resolve_replay_mode(mode_env: str, legacy_hot: bool) -> str:
+    valid_modes = {"standard", "adaptive", "hot"}
+    raw = (mode_env or "").strip().lower()
+    if raw:
+        return raw if raw in valid_modes else "standard"
+    if legacy_hot:
+        return "hot"
+    return "standard"
+
+
 _ADAPTIVE_REPLAYS = max(0, int(os.environ.get("GFXGRAPH_ADAPTIVE_REPLAYS", "8")))
 _STATS_FLUSH_INTERVAL = max(1, int(os.environ.get("GFXGRAPH_REPLAY_STATS_FLUSH", "32")))
 _ADAPTIVE_EAGER_BIAS = max(1.0, float(os.environ.get("GFXGRAPH_ADAPTIVE_EAGER_BIAS", "1.10")))
@@ -49,7 +59,10 @@ _ADAPTIVE_GRAPH_ADVANTAGE = min(1.0, max(0.5, float(os.environ.get("GFXGRAPH_ADA
 _ADAPTIVE_SIGNATURE_CACHE_MAX = max(32, int(os.environ.get("GFXGRAPH_ADAPTIVE_SIGNATURE_CACHE_MAX", "512")))
 _ADAPTIVE_SPIKE_SWITCH_FACTOR = max(1.0, float(os.environ.get("GFXGRAPH_ADAPTIVE_SPIKE_SWITCH_FACTOR", "1.20")))
 _ADAPTIVE_SPIKE_SWITCH_HITS = max(1, int(os.environ.get("GFXGRAPH_ADAPTIVE_SPIKE_SWITCH_HITS", "2")))
-_HOT_REPLAY_MODE = os.environ.get("GFXGRAPH_REPLAY_HOT_MODE", "").strip() in {"1", "true", "TRUE", "yes", "on"}
+_LEGACY_HOT_REPLAY_MODE = os.environ.get("GFXGRAPH_REPLAY_HOT_MODE", "").strip() in {"1", "true", "TRUE", "yes", "on"}
+_REPLAY_MODE = _resolve_replay_mode(os.environ.get("GFXGRAPH_REPLAY_MODE", ""), _LEGACY_HOT_REPLAY_MODE)
+_HOT_REPLAY_MODE = _REPLAY_MODE == "hot"
+_ADAPTIVE_REPLAY_MODE = _REPLAY_MODE == "adaptive"
 _TRUSTED_REPLAY_THRESHOLD = max(0, int(os.environ.get("GFXGRAPH_TRUSTED_REPLAY_THRESHOLD", "16")))
 _TRUSTED_REPLAY_SAMPLE_INTERVAL = max(1, int(os.environ.get("GFXGRAPH_TRUSTED_REPLAY_SAMPLE_INTERVAL", "16")))
 _ADAPTIVE_SIGNATURE_CACHE_LOCK = threading.Lock()
@@ -285,8 +298,9 @@ class BridgedCUDAGraph:
         # Eager fallback path
         if self._eager_fallback:
             return self._run_eager(input_tensor)
-        self._maybe_load_cached_decision(batch_size, input_tensor)
-        if self._prefer_eager:
+        if _ADAPTIVE_REPLAY_MODE:
+            self._maybe_load_cached_decision(batch_size, input_tensor)
+        if _ADAPTIVE_REPLAY_MODE and self._prefer_eager:
             return self._run_preferred_eager(input_tensor)
 
         # Shape bucketing path
@@ -322,7 +336,8 @@ class BridgedCUDAGraph:
                 self._trusted_replay_active = True
             if sample_diagnostics:
                 self._record_replay_sample(t0)
-                self._maybe_update_adaptive_mode(input_tensor)
+                if _ADAPTIVE_REPLAY_MODE:
+                    self._maybe_update_adaptive_mode(input_tensor)
                 return self._maybe_validate(self._static_output, input_tensor)
             return self._static_output
 
@@ -360,6 +375,8 @@ class BridgedCUDAGraph:
         return out, us
 
     def _maybe_update_adaptive_mode(self, input_tensor):
+        if not _ADAPTIVE_REPLAY_MODE:
+            return
         if _ADAPTIVE_REPLAYS <= 0 or self._adaptive_disabled or self._model_fn is None:
             return
         if self._adaptive_replay_samples >= _ADAPTIVE_REPLAYS:
@@ -454,6 +471,8 @@ class BridgedCUDAGraph:
         return f"{fn_sig}|b={batch_hint}|shape={shape}|dtype={dtype}|device={device}|stride={stride}"
 
     def _maybe_load_cached_decision(self, batch_size, input_tensor):
+        if not _ADAPTIVE_REPLAY_MODE:
+            return
         if self._adaptive_disabled:
             return
         if self._adaptive_signature is None:

@@ -71,6 +71,8 @@ def test_adaptive_signature_varies_by_shape():
 
 
 def test_cached_adaptive_decision_sets_preferred_eager():
+    original_adaptive_mode = graph_manager._ADAPTIVE_REPLAY_MODE
+    graph_manager._ADAPTIVE_REPLAY_MODE = True
     g = BridgedCUDAGraph()
     g._model_fn = lambda x: x
 
@@ -83,9 +85,12 @@ def test_cached_adaptive_decision_sets_preferred_eager():
     sig = g._build_adaptive_signature(None, t)
     graph_manager._set_adaptive_signature_decision(sig, "eager")
 
-    g._maybe_load_cached_decision(None, t)
-    assert g._prefer_eager is True
-    assert g._adaptive_disabled is True
+    try:
+        g._maybe_load_cached_decision(None, t)
+        assert g._prefer_eager is True
+        assert g._adaptive_disabled is True
+    finally:
+        graph_manager._ADAPTIVE_REPLAY_MODE = original_adaptive_mode
 
 
 def test_hot_replay_mode_bypasses_validation():
@@ -103,11 +108,22 @@ def test_hot_replay_mode_bypasses_validation():
         graph_manager._HOT_REPLAY_MODE = original_hot_mode
 
 
+def test_resolve_replay_mode():
+    assert graph_manager._resolve_replay_mode("adaptive", False) == "adaptive"
+    assert graph_manager._resolve_replay_mode("hot", False) == "hot"
+    assert graph_manager._resolve_replay_mode("standard", False) == "standard"
+    assert graph_manager._resolve_replay_mode("bogus", False) == "standard"
+    assert graph_manager._resolve_replay_mode("", True) == "hot"
+    assert graph_manager._resolve_replay_mode("", False) == "standard"
+
+
 def test_trusted_replay_promotes_and_skips_non_sampled_diagnostics():
     original_hot_mode = graph_manager._HOT_REPLAY_MODE
+    original_adaptive_mode = graph_manager._ADAPTIVE_REPLAY_MODE
     original_threshold = graph_manager._TRUSTED_REPLAY_THRESHOLD
     original_interval = graph_manager._TRUSTED_REPLAY_SAMPLE_INTERVAL
     graph_manager._HOT_REPLAY_MODE = False
+    graph_manager._ADAPTIVE_REPLAY_MODE = True
     graph_manager._TRUSTED_REPLAY_THRESHOLD = 2
     graph_manager._TRUSTED_REPLAY_SAMPLE_INTERVAL = 3
     try:
@@ -130,13 +146,16 @@ def test_trusted_replay_promotes_and_skips_non_sampled_diagnostics():
         assert g._maybe_validate.call_count == 2
     finally:
         graph_manager._HOT_REPLAY_MODE = original_hot_mode
+        graph_manager._ADAPTIVE_REPLAY_MODE = original_adaptive_mode
         graph_manager._TRUSTED_REPLAY_THRESHOLD = original_threshold
         graph_manager._TRUSTED_REPLAY_SAMPLE_INTERVAL = original_interval
 
 
 def test_trusted_replay_keeps_fallback_on_replay_error():
     original_hot_mode = graph_manager._HOT_REPLAY_MODE
+    original_adaptive_mode = graph_manager._ADAPTIVE_REPLAY_MODE
     graph_manager._HOT_REPLAY_MODE = False
+    graph_manager._ADAPTIVE_REPLAY_MODE = True
     try:
         g = BridgedCUDAGraph()
         mock_graph = MagicMock()
@@ -149,3 +168,21 @@ def test_trusted_replay_keeps_fallback_on_replay_error():
         g._model_fn.assert_called_once()
     finally:
         graph_manager._HOT_REPLAY_MODE = original_hot_mode
+        graph_manager._ADAPTIVE_REPLAY_MODE = original_adaptive_mode
+
+
+def test_standard_mode_ignores_adaptive_prefer_eager():
+    original_hot_mode = graph_manager._HOT_REPLAY_MODE
+    original_adaptive_mode = graph_manager._ADAPTIVE_REPLAY_MODE
+    graph_manager._HOT_REPLAY_MODE = False
+    graph_manager._ADAPTIVE_REPLAY_MODE = False
+    try:
+        g = BridgedCUDAGraph()
+        g._prefer_eager = True
+        g._graph = MagicMock()
+        g._static_output = "graph"
+        out = g.replay()
+        assert out == "graph"
+    finally:
+        graph_manager._HOT_REPLAY_MODE = original_hot_mode
+        graph_manager._ADAPTIVE_REPLAY_MODE = original_adaptive_mode

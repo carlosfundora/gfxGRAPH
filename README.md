@@ -225,6 +225,12 @@ export GFXGRAPH_VRAM_CAP=0.90
 # Optional: replay hot mode (skips replay-path diagnostics for lowest overhead)
 export GFXGRAPH_REPLAY_HOT_MODE=1
 
+# Optional: unified replay mode selection (standard|adaptive|hot)
+# - standard: trusted replay + sampled diagnostics
+# - adaptive: enables adaptive eager/graph selection and signature winner cache
+# - hot: leanest replay path (minimum replay diagnostics)
+export GFXGRAPH_REPLAY_MODE=adaptive
+
 # Optional: standard-mode trusted replay tuning (safe fallback remains enabled)
 export GFXGRAPH_TRUSTED_REPLAY_THRESHOLD=16
 export GFXGRAPH_TRUSTED_REPLAY_SAMPLE_INTERVAL=16
@@ -248,7 +254,8 @@ INFO: gfxGRAPH health check passed: AMD Radeon RX 6700 XT (gfx1030), VRAM 10240M
 GFXGRAPH=1 python3 my_script.py        # standard mode
 GFXGRAPH=debug python3 my_script.py    # verbose logging
 GFXGRAPH=validate python3 my_script.py # correctness checking
-GFXGRAPH_REPLAY_HOT_MODE=1 python3 my_script.py # lower-overhead replay path
+GFXGRAPH_REPLAY_MODE=adaptive python3 my_script.py # adaptive eager/graph mode
+GFXGRAPH_REPLAY_MODE=hot python3 my_script.py      # lower-overhead replay path
 ```
 
 ---
