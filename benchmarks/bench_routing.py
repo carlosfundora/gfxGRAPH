@@ -9,9 +9,9 @@ mock_torch.Tensor = MagicMock
 sys.modules["torch"] = mock_torch
 sys.modules["torch.cuda"] = mock_torch.cuda
 
-import gfxgraph_rs
+import rs_gfxgraph
 _HAS_RUST_EXT = False
-sys.modules["gfxgraph_rs"] = MagicMock()
+sys.modules["rs_gfxgraph"] = MagicMock()
 
 from hipgraph_bridge.shape_bucketing import ShapeBucketPool
 

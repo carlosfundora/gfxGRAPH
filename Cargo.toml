@@ -1,5 +1,5 @@
 [workspace]
 members = [
-    "gfxgraph_rs",
-    "gfxgraph_stats_rs"
+    "rust/rs_gfxgraph",
+    "rust/rs_gfxgraph_stats"
 ]

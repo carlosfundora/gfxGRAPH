@@ -1,10 +1,10 @@
 [package]
-name = "gfxgraph_stats"
+name = "rs_gfxgraph_stats"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "gfxgraph_stats"
+name = "rs_gfxgraph_stats"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]

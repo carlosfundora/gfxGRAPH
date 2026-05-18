@@ -34,11 +34,11 @@ except ImportError:
     _get_validate_mode = None
 
 try:
-    import gfxgraph_rs as _gfxgraph_rs
+    import rs_gfxgraph as _rs_gfxgraph
 except Exception:
-    _gfxgraph_rs = None
+    _rs_gfxgraph = None
 
-_HAS_BRIDGED_VALIDATOR = _gfxgraph_rs is not None and hasattr(_gfxgraph_rs, "BridgedGraphValidator")
+_HAS_BRIDGED_VALIDATOR = _rs_gfxgraph is not None and hasattr(_rs_gfxgraph, "BridgedGraphValidator")
 
 _log = logging.getLogger("gfxgraph")
 
@@ -537,7 +537,7 @@ class BridgedCUDAGraph:
 
         if _HAS_BRIDGED_VALIDATOR:
             if getattr(self, "_validator", None) is None or getattr(self, "_validator_enabled_flag", None) != validation_enabled:
-                self._validator = _gfxgraph_rs.BridgedGraphValidator(validation_enabled)
+                self._validator = _rs_gfxgraph.BridgedGraphValidator(validation_enabled)
                 self._validator_enabled_flag = validation_enabled
             return self._validator.maybe_validate(graph_output, input_tensor, self._model_fn)
 

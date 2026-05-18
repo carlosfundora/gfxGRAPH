@@ -125,7 +125,7 @@ features work without the native library.
 This is the advanced path and requires the ROCm SDK.
 
 **What you get additionally:**
-- Native helper paths for selected bridge components (`gfxgraph_rs`, `gfxgraph_stats`)
+- Native helper paths for selected bridge components (`rs_gfxgraph`, `rs_gfxgraph_stats`)
 - Optional `libhipgraph_bridge.so` loading when present
 - Lower Python overhead on supported paths
 
@@ -358,7 +358,7 @@ Build `libhipgraph_bridge.so` (see Tier 2 above) only if you need the 2 extra na
 - `BridgedCUDAGraph` capture/replay works on gfx1030 with eager fallback safety.
 - Dynamic-shape `ShapeBucketPool` capture/replay works across bucketed batch sizes.
 - `ConditionalGraph` branch capture/replay works with fallback on per-branch failure.
-- Rust companion modules (`gfxgraph_rs`, `gfxgraph_stats`) are optional, but when present they are used for router/validator/stats fast paths.
+- Rust companion modules (`rs_gfxgraph`, `rs_gfxgraph_stats`) are optional, but when present they are used for router/validator/stats fast paths.
 
 ### Public benchmark (RX 6700 XT / gfx1030, ROCm 7.2, torch 2.11.0+rocm7.2)
 

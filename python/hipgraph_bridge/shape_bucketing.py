@@ -15,11 +15,11 @@ import bisect
 import weakref
 
 try:
-    import gfxgraph_rs as _gfxgraph_rs
+    import rs_gfxgraph as _rs_gfxgraph
 except Exception:
-    _gfxgraph_rs = None
+    _rs_gfxgraph = None
 
-_HAS_BUCKET_ROUTER = _gfxgraph_rs is not None and hasattr(_gfxgraph_rs, "BucketRouter")
+_HAS_BUCKET_ROUTER = _rs_gfxgraph is not None and hasattr(_rs_gfxgraph, "BucketRouter")
 
 import logging
 import os
@@ -33,8 +33,8 @@ except ImportError:
     _bump = None
 
 _log = logging.getLogger("gfxgraph")
-if _gfxgraph_rs is not None and not _HAS_BUCKET_ROUTER:
-    _log.warning("gfxgraph_rs loaded without BucketRouter; using Python router fallback")
+if _rs_gfxgraph is not None and not _HAS_BUCKET_ROUTER:
+    _log.warning("rs_gfxgraph loaded without BucketRouter; using Python router fallback")
 
 # Configurable VRAM cap (fraction, 0.0-1.0). Default: 80%.
 _VRAM_CAP = float(os.environ.get("GFXGRAPH_VRAM_CAP", "0.80"))
@@ -72,7 +72,7 @@ class ShapeBucketPool:
         self.model_fn = model_fn
         self.buckets = sorted(buckets or [1, 2, 4, 8, 16, 32, 64])
         if _HAS_BUCKET_ROUTER:
-            self._router = _gfxgraph_rs.BucketRouter(self.buckets)
+            self._router = _rs_gfxgraph.BucketRouter(self.buckets)
             self._warmed_up = None
             self._failed_buckets = None
         else:

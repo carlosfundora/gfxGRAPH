@@ -1,7 +1,0 @@
-## 2024-05-17 - Optimize VRAM info polling to reduce GPU synchronization
-**Learning:** PyTorch's `torch.cuda.mem_get_info()` causes GPU synchronization which can introduce performance bottlenecks when repeatedly called in quick succession, such as during the warmup phase of CUDA graphs in a loop over bucket sizes.
-**Action:** When performing bulk operations or checks that require VRAM polling, cache the result of `torch.cuda.mem_get_info()` and reuse it across closely-spaced queries. Alternatively, query the info periodically (e.g., every 5 items in a loop) instead of on every iteration to minimize synchronization overhead while still respecting dynamic constraints like VRAM caps.
-
-## 2024-05-18 - Cache PyO3 Rust extension objects to eliminate FFI instantiation overhead in hot paths
-**Learning:** Instantiating PyO3 Rust extension objects (like `BridgedGraphValidator`) in Python on every forward pass crossing the FFI boundary introduces unnecessary serialization and overhead that can outweigh the speed benefits of the native extension itself, especially during high-frequency execution like graph replay.
-**Action:** When a Python wrapper calls into a PyO3 Rust class repeatedly, the wrapper should instantiate the class once and cache it on the Python instance (`self._validator = _gfxgraph_rs.BridgedGraphValidator(...)`) so that subsequent calls only invoke methods on the pre-initialized object, strictly limiting FFI overhead.

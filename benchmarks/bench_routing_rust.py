@@ -10,7 +10,7 @@ sys.modules["torch"] = mock_torch
 sys.modules["torch.cuda"] = mock_torch.cuda
 
 from hipgraph_bridge.shape_bucketing import ShapeBucketPool
-import gfxgraph_rs
+import rs_gfxgraph
 
 pool = ShapeBucketPool(lambda x: x, buckets=[1, 4, 8, 16, 32, 64])
 pool._router.mark_warmed_up(1)

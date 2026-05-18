@@ -38,7 +38,7 @@ def main():
         return mock_torch.Tensor()
 
     # Disable Rust extension for the baseline
-    sys.modules['gfxgraph_rs'] = None
+    sys.modules['rs_gfxgraph'] = None
 
     import gfxgraph._enable
     gfxgraph._enable._validate_mode = True

@@ -1,12 +1,12 @@
 import pytest
 
 try:
-    from gfxgraph_rs import BucketRouter
+    from rs_gfxgraph import BucketRouter
     _HAS_RUST_EXT = True
 except ImportError:
     _HAS_RUST_EXT = False
 
-@pytest.mark.skipif(not _HAS_RUST_EXT, reason="gfxgraph_rs not built")
+@pytest.mark.skipif(not _HAS_RUST_EXT, reason="rs_gfxgraph not built")
 def test_rust_bucket_selector():
     # Unit test for Rust component
     router = BucketRouter([1, 4, 8, 16, 32])

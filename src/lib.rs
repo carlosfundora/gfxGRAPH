@@ -85,7 +85,7 @@ fn reset() {
 }
 
 #[pymodule]
-fn gfxgraph_stats(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn rs_gfxgraph_stats(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(bump, m)?)?;
     m.add_function(wrap_pyfunction!(record_replay_us, m)?)?;
     m.add_function(wrap_pyfunction!(stats, m)?)?;

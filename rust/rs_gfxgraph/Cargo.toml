@@ -1,10 +1,10 @@
 [package]
-name = "gfxgraph_rs"
+name = "rs_gfxgraph"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "gfxgraph_rs"
+name = "rs_gfxgraph"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]

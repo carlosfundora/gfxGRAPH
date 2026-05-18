@@ -65,7 +65,7 @@ _atexit_registered = False
 
 
 try:
-    import gfxgraph_stats
+    import rs_gfxgraph_stats
     _HAS_RUST_STATS = True
 except ImportError:
     _HAS_RUST_STATS = False
@@ -73,7 +73,7 @@ except ImportError:
 def bump(counter: str, amount: int = 1) -> None:
     """Thread-safe counter increment. Used by bridge modules."""
     if _HAS_RUST_STATS:
-        gfxgraph_stats.bump(counter, amount)
+        rs_gfxgraph_stats.bump(counter, amount)
         return
     with _stats_lock:
         _stats[counter] = _stats.get(counter, 0) + amount
@@ -82,7 +82,7 @@ def bump(counter: str, amount: int = 1) -> None:
 def record_replay_us(us: float) -> None:
     """Record a replay duration in microseconds, update running average."""
     if _HAS_RUST_STATS:
-        gfxgraph_stats.record_replay_us(us)
+        rs_gfxgraph_stats.record_replay_us(us)
         return
     with _stats_lock:
         _stats["replay_count"] += 1
@@ -180,7 +180,7 @@ def is_enabled() -> bool:
 def stats() -> dict:
     """Return performance/diagnostic counters (thread-safe snapshot)."""
     if _HAS_RUST_STATS:
-        out = gfxgraph_stats.stats()
+        out = rs_gfxgraph_stats.stats()
         out["enabled_at"] = _stats.get("enabled_at")
         return out
     with _stats_lock:

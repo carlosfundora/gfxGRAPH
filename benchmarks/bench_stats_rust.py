@@ -1,13 +1,13 @@
 import time
 import threading
 
-import gfxgraph_stats
+import rs_gfxgraph_stats
 
 def run_bench(iterations):
     t0 = time.perf_counter()
     for _ in range(iterations):
-        gfxgraph_stats.bump("capture_count", 1)
-        gfxgraph_stats.record_replay_us(42.5)
+        rs_gfxgraph_stats.bump("capture_count", 1)
+        rs_gfxgraph_stats.record_replay_us(42.5)
     t1 = time.perf_counter()
     return t1 - t0
 
@@ -16,8 +16,8 @@ def run_threaded_bench(iterations, threads):
 
     def worker():
         for _ in range(iterations):
-            gfxgraph_stats.bump("replay_count", 1)
-            gfxgraph_stats.record_replay_us(15.0)
+            rs_gfxgraph_stats.bump("replay_count", 1)
+            rs_gfxgraph_stats.record_replay_us(15.0)
 
     t0 = time.perf_counter()
     for _ in range(threads):
@@ -33,7 +33,7 @@ def run_threaded_bench(iterations, threads):
 if __name__ == "__main__":
     import json
     # Reset stats
-    gfxgraph_stats.reset()
+    rs_gfxgraph_stats.reset()
 
     # Warmup
     run_bench(1000)
