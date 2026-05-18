@@ -536,8 +536,10 @@ class BridgedCUDAGraph:
             return graph_output
 
         if _HAS_BRIDGED_VALIDATOR:
-            validator = _gfxgraph_rs.BridgedGraphValidator(validation_enabled)
-            return validator.maybe_validate(graph_output, input_tensor, self._model_fn)
+            if getattr(self, "_validator", None) is None or getattr(self, "_validator_enabled_flag", None) != validation_enabled:
+                self._validator = _gfxgraph_rs.BridgedGraphValidator(validation_enabled)
+                self._validator_enabled_flag = validation_enabled
+            return self._validator.maybe_validate(graph_output, input_tensor, self._model_fn)
 
         _log.debug("Validation: comparing graph output vs eager")
         with torch.no_grad():
