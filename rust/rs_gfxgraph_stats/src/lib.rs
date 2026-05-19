@@ -1,4 +1,5 @@
 use pyo3::prelude::*;
+use pyo3::types::PyAny;
 use std::sync::{Arc, Mutex};
 use dashmap::DashMap;
 
@@ -37,7 +38,7 @@ fn record_replay_us(us: f64) -> PyResult<()> {
 }
 
 #[pyfunction]
-fn stats(py: Python<'_>) -> PyResult<PyObject> {
+fn stats(py: Python<'_>) -> PyResult<Py<PyAny>> {
     use pyo3::types::PyDict;
     let dict = PyDict::new(py);
 
@@ -62,7 +63,7 @@ fn stats(py: Python<'_>) -> PyResult<PyObject> {
 
     dict.set_item("avg_replay_us", avg)?;
 
-    Ok(dict.into())
+    Ok(dict.into_any().unbind())
 }
 
 #[pyfunction]

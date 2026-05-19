@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::exceptions::{PyValueError, PyKeyError, PyRuntimeError, PyTypeError};
-use pyo3::types::{PyDict, PyString};
+use pyo3::types::{PyAny, PyDict};
 use std::collections::HashSet;
 use std::sync::RwLock;
 
@@ -73,11 +73,11 @@ impl BucketRouter {
 #[pyclass]
 pub struct ConditionalGraphRunner {
     branches: Vec<String>,
-    graphs: PyObject, // dict branch_name -> CUDAGraph
-    static_outputs: PyObject, // dict branch_name -> static output tensor
+    graphs: Py<PyAny>, // dict branch_name -> CUDAGraph
+    static_outputs: Py<PyAny>, // dict branch_name -> static output tensor
     failed_branches: RwLock<HashSet<String>>,
-    shared_input: PyObject, // optional shared tensor
-    branches_callbacks: PyObject, // dict branch_name -> callable fallback
+    shared_input: Py<PyAny>, // optional shared tensor
+    branches_callbacks: Py<PyAny>, // dict branch_name -> callable fallback
 }
 
 #[pymethods]
@@ -85,11 +85,11 @@ impl ConditionalGraphRunner {
     #[new]
     fn new(
         branches: Vec<String>,
-        graphs: PyObject,
-        static_outputs: PyObject,
+        graphs: Py<PyAny>,
+        static_outputs: Py<PyAny>,
         failed_branches: Vec<String>,
-        shared_input: PyObject,
-        branches_callbacks: PyObject,
+        shared_input: Py<PyAny>,
+        branches_callbacks: Py<PyAny>,
     ) -> Self {
         let mut failed = HashSet::new();
         for b in failed_branches {
@@ -109,8 +109,8 @@ impl ConditionalGraphRunner {
         &self,
         py: Python<'py>,
         branch: &str,
-        input_tensor: Option<PyObject>,
-    ) -> PyResult<PyObject> {
+        input_tensor: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
         if !self.branches.iter().any(|b| b == branch) {
             return Err(PyKeyError::new_err(format!(
                 "Unknown branch '{}'. Available: {:?}",
@@ -179,7 +179,7 @@ impl ConditionalGraphRunner {
         }
     }
 
-    fn eager_fallback<'py>(&self, py: Python<'py>, branch: &str, input_tensor: Option<PyObject>) -> PyResult<PyObject> {
+    fn eager_fallback<'py>(&self, py: Python<'py>, branch: &str, input_tensor: Option<Py<PyAny>>) -> PyResult<Py<PyAny>> {
         let callbacks_dict = self.branches_callbacks.downcast_bound::<PyDict>(py)
             .map_err(|_| PyRuntimeError::new_err("Invalid state: branches_callbacks must be a dict"))?;
         let fn_obj = callbacks_dict.get_item(branch)?.ok_or_else(|| PyRuntimeError::new_err("Branch fallback not found"))?;
@@ -241,10 +241,10 @@ impl BridgedGraphValidator {
     fn maybe_validate<'py>(
         &self,
         py: Python<'py>,
-        graph_output: PyObject,
-        input_tensor: Option<PyObject>,
-        model_fn: Option<PyObject>,
-    ) -> PyResult<PyObject> {
+        graph_output: Py<PyAny>,
+        input_tensor: Option<Py<PyAny>>,
+        model_fn: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
         if !self.validation_enabled {
             return Ok(graph_output);
         }
