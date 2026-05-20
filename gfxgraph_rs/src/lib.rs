@@ -78,31 +78,61 @@ pub struct ConditionalGraphRunner {
     failed_branches: RwLock<HashSet<String>>,
     shared_input: PyObject, // optional shared tensor
     branches_callbacks: PyObject, // dict branch_name -> callable fallback
+    time_perf_counter: PyObject,
+    logger_warning: PyObject,
+    record_replay_us_fn: Option<PyObject>,
+    bump_fn: Option<PyObject>,
+    torch_no_grad: PyObject,
 }
 
 #[pymethods]
 impl ConditionalGraphRunner {
     #[new]
     fn new(
+        py: Python<'_>,
         branches: Vec<String>,
         graphs: PyObject,
         static_outputs: PyObject,
         failed_branches: Vec<String>,
         shared_input: PyObject,
         branches_callbacks: PyObject,
-    ) -> Self {
+    ) -> PyResult<Self> {
         let mut failed = HashSet::new();
         for b in failed_branches {
             failed.insert(b);
         }
-        ConditionalGraphRunner {
+
+        let time_mod = py.import("time")?;
+        let time_perf_counter = time_mod.getattr("perf_counter")?.into();
+
+        let log_mod = py.import("logging")?;
+        let logger = log_mod.call_method1("getLogger", ("gfxgraph",))?;
+        let logger_warning = logger.getattr("warning")?.into();
+
+        let (record_replay_us_fn, bump_fn) = if let Ok(enable_mod) = py.import("gfxgraph._enable") {
+            let record = enable_mod.getattr("record_replay_us").ok().map(|r| r.into());
+            let bump = enable_mod.getattr("bump").ok().map(|b| b.into());
+            (record, bump)
+        } else {
+            (None, None)
+        };
+
+        let torch = py.import("torch")?;
+        let torch_no_grad = torch.getattr("no_grad")?.into();
+
+        Ok(ConditionalGraphRunner {
             branches,
             graphs,
             static_outputs,
             failed_branches: RwLock::new(failed),
             shared_input,
             branches_callbacks,
-        }
+            time_perf_counter,
+            logger_warning,
+            record_replay_us_fn,
+            bump_fn,
+            torch_no_grad,
+        })
     }
 
     fn run<'py>(
@@ -144,17 +174,14 @@ impl ConditionalGraphRunner {
             }
         }
 
-        let time_mod = py.import("time")?;
-        let t0: f64 = time_mod.call_method0("perf_counter")?.extract()?;
+        let t0: f64 = self.time_perf_counter.call0(py)?.extract(py)?;
 
         let graphs_dict = self.graphs.downcast_bound::<PyDict>(py)
             .map_err(|_| PyRuntimeError::new_err("Invalid state: graphs must be a dict"))?;
         let graph = graphs_dict.get_item(branch)?;
         if let Some(g) = graph {
             if let Err(e) = g.call_method0("replay") {
-                let log_mod = py.import("logging")?;
-                let logger = log_mod.call_method1("getLogger", ("gfxgraph",))?;
-                logger.call_method1("warning", (format!("Replay failed for branch '{}': {:?} — eager fallback", branch, e),))?;
+                let _ = self.logger_warning.call1(py, (format!("Replay failed for branch '{}': {:?} — eager fallback", branch, e),));
 
                 if let Ok(mut lock) = self.failed_branches.write() {
                     lock.insert(branch.to_string());
@@ -163,10 +190,10 @@ impl ConditionalGraphRunner {
             }
         }
 
-        let us = (time_mod.call_method0("perf_counter")?.extract::<f64>()? - t0) * 1e6;
+        let us = (self.time_perf_counter.call0(py)?.extract::<f64>(py)? - t0) * 1e6;
 
-        if let Ok(enable_mod) = py.import("gfxgraph._enable") {
-            let _ = enable_mod.call_method1("record_replay_us", (us,));
+        if let Some(f) = &self.record_replay_us_fn {
+            let _ = f.call1(py, (us,));
         }
 
         let outputs_dict = self.static_outputs.downcast_bound::<PyDict>(py)
@@ -184,15 +211,14 @@ impl ConditionalGraphRunner {
             .map_err(|_| PyRuntimeError::new_err("Invalid state: branches_callbacks must be a dict"))?;
         let fn_obj = callbacks_dict.get_item(branch)?.ok_or_else(|| PyRuntimeError::new_err("Branch fallback not found"))?;
 
-        if let Ok(enable_mod) = py.import("gfxgraph._enable") {
-            let _ = enable_mod.call_method1("bump", ("fallback_count",));
+        if let Some(b) = &self.bump_fn {
+            let _ = b.call1(py, ("fallback_count",));
         }
 
-        let torch_mod = py.import("torch")?;
-        let no_grad_ctx = torch_mod.call_method0("no_grad")?;
+        let no_grad_ctx = self.torch_no_grad.call0(py)?;
 
         // Use no_grad context
-        let _ = no_grad_ctx.call_method0("__enter__")?;
+        let _ = no_grad_ctx.call_method0(py, "__enter__")?;
 
         let result = if let Some(ref input) = input_tensor {
             fn_obj.call1((input,))
@@ -204,13 +230,13 @@ impl ConditionalGraphRunner {
 
         match result {
             Ok(val) => {
-                let _ = no_grad_ctx.call_method1("__exit__", (py.None(), py.None(), py.None()))?;
+                let _ = no_grad_ctx.call_method1(py, "__exit__", (py.None(), py.None(), py.None()))?;
                 Ok(val.into())
             }
             Err(e) => {
                 // We just let the exception propagate, torch.no_grad.__exit__ must be called
                 // Since we don't have the traceback, we'll just pass None for all.
-                let _ = no_grad_ctx.call_method1("__exit__", (py.None(), py.None(), py.None()));
+                let _ = no_grad_ctx.call_method1(py, "__exit__", (py.None(), py.None(), py.None()));
                 return Err(e);
             }
         }
@@ -229,13 +255,40 @@ fn gfxgraph_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pyclass]
 pub struct BridgedGraphValidator {
     validation_enabled: bool,
+    torch_no_grad: PyObject,
+    torch_allclose: PyObject,
+    logger_error: PyObject,
+    logger_debug: PyObject,
+    bump_fn: Option<PyObject>,
 }
 
 #[pymethods]
 impl BridgedGraphValidator {
     #[new]
-    fn new(validation_enabled: bool) -> Self {
-        BridgedGraphValidator { validation_enabled }
+    fn new(py: Python<'_>, validation_enabled: bool) -> PyResult<Self> {
+        let torch = py.import("torch")?;
+        let torch_no_grad = torch.getattr("no_grad")?.into();
+        let torch_allclose = torch.getattr("allclose")?.into();
+
+        let log_mod = py.import("logging")?;
+        let logger = log_mod.call_method1("getLogger", ("gfxgraph",))?;
+        let logger_error = logger.getattr("error")?.into();
+        let logger_debug = logger.getattr("debug")?.into();
+
+        let bump_fn = if let Ok(enable_mod) = py.import("gfxgraph._enable") {
+            enable_mod.getattr("bump").ok().map(|b| b.into())
+        } else {
+            None
+        };
+
+        Ok(BridgedGraphValidator {
+            validation_enabled,
+            torch_no_grad,
+            torch_allclose,
+            logger_error,
+            logger_debug,
+            bump_fn,
+        })
     }
 
     fn maybe_validate<'py>(
@@ -259,33 +312,27 @@ impl BridgedGraphValidator {
             None => return Ok(graph_output),
         };
 
-        let torch = py.import("torch")?;
-        let no_grad_ctx = torch.call_method0("no_grad")?;
-        let _ = no_grad_ctx.call_method0("__enter__")?;
+        let no_grad_ctx = self.torch_no_grad.call0(py)?;
+        let _ = no_grad_ctx.call_method0(py, "__enter__")?;
 
         let eager_output = model.call1(py, (input,))?;
 
-        let _ = no_grad_ctx.call_method1("__exit__", (py.None(), py.None(), py.None()))?;
+        let _ = no_grad_ctx.call_method1(py, "__exit__", (py.None(), py.None(), py.None()))?;
 
         // simplified for now, use default tolerances or implement kwargs equivalent
-        let allclose = torch.call_method1("allclose", (&graph_output, &eager_output))?;
-        let is_close: bool = allclose.extract()?;
+        let allclose = self.torch_allclose.call1(py, (&graph_output, &eager_output))?;
+        let is_close: bool = allclose.extract(py)?;
 
         if !is_close {
-            let log_mod = py.import("logging")?;
-            let logger = log_mod.call_method1("getLogger", ("gfxgraph",))?;
-            logger.call_method1("error", ("VALIDATION FAILURE: graph output differs from eager output! \u{2014} possible PyTorch #155684",))?;
+            let _ = self.logger_error.call1(py, ("VALIDATION FAILURE: graph output differs from eager output! \u{2014} possible PyTorch #155684",));
 
-            let enable_mod = py.import("gfxgraph._enable").ok();
-            if let Some(m) = enable_mod {
-                let _ = m.call_method1("bump", ("validation_failures",));
+            if let Some(b) = &self.bump_fn {
+                let _ = b.call1(py, ("validation_failures",));
             }
             return Ok(eager_output);
         }
 
-        let log_mod = py.import("logging")?;
-        let logger = log_mod.call_method1("getLogger", ("gfxgraph",))?;
-        logger.call_method1("debug", ("Validation passed",))?;
+        let _ = self.logger_debug.call1(py, ("Validation passed",));
 
         Ok(graph_output)
     }

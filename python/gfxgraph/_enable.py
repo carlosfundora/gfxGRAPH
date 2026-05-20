@@ -67,29 +67,26 @@ _atexit_registered = False
 try:
     import gfxgraph_stats
     _HAS_RUST_STATS = True
+
+    # Alias functions directly for hot-path speed
+    bump = gfxgraph_stats.bump
+    record_replay_us = gfxgraph_stats.record_replay_us
 except ImportError:
     _HAS_RUST_STATS = False
 
-def bump(counter: str, amount: int = 1) -> None:
-    """Thread-safe counter increment. Used by bridge modules."""
-    if _HAS_RUST_STATS:
-        gfxgraph_stats.bump(counter, amount)
-        return
-    with _stats_lock:
-        _stats[counter] = _stats.get(counter, 0) + amount
+    def bump(counter: str, amount: int = 1) -> None:
+        """Thread-safe counter increment. Used by bridge modules."""
+        with _stats_lock:
+            _stats[counter] = _stats.get(counter, 0) + amount
 
-
-def record_replay_us(us: float) -> None:
-    """Record a replay duration in microseconds, update running average."""
-    if _HAS_RUST_STATS:
-        gfxgraph_stats.record_replay_us(us)
-        return
-    with _stats_lock:
-        _stats["replay_count"] += 1
-        _stats["_total_replay_us"] += us
-        _stats["avg_replay_us"] = (
-            _stats["_total_replay_us"] / _stats["replay_count"]
-        )
+    def record_replay_us(us: float) -> None:
+        """Record a replay duration in microseconds, update running average."""
+        with _stats_lock:
+            _stats["replay_count"] += 1
+            _stats["_total_replay_us"] += us
+            _stats["avg_replay_us"] = (
+                _stats["_total_replay_us"] / _stats["replay_count"]
+            )
 
 def get_validate_mode() -> bool:
     """Check whether validation mode is active."""

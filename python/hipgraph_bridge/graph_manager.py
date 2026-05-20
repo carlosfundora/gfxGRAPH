@@ -122,6 +122,8 @@ class BridgedCUDAGraph:
         self._adaptive_graph_spikes = 0
         self._trusted_replay_active = False
         self._trusted_replay_count = 0
+        self._validator = None
+        self._validator_enabled_flag = None
 
     # ---- PyTorch CUDAGraph low-level API compatibility ----
     # These methods make BridgedCUDAGraph a true drop-in for torch.cuda.CUDAGraph.
@@ -536,7 +538,7 @@ class BridgedCUDAGraph:
             return graph_output
 
         if _HAS_BRIDGED_VALIDATOR:
-            if getattr(self, "_validator", None) is None or getattr(self, "_validator_enabled_flag", None) != validation_enabled:
+            if self._validator is None or self._validator_enabled_flag != validation_enabled:
                 self._validator = _gfxgraph_rs.BridgedGraphValidator(validation_enabled)
                 self._validator_enabled_flag = validation_enabled
             return self._validator.maybe_validate(graph_output, input_tensor, self._model_fn)
@@ -579,6 +581,8 @@ class BridgedCUDAGraph:
         self._adaptive_graph_spikes = 0
         self._trusted_replay_active = False
         self._trusted_replay_count = 0
+        self._validator = None
+        self._validator_enabled_flag = None
 
     # ---- Additional CUDAGraph API stubs (future-proofing) ----
 
