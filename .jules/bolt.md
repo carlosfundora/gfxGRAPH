@@ -1,0 +1,3 @@
+## 2026-05-20 - Alias module imports at file level to avoid global boolean checks
+**Learning:** Checking a global boolean like `_HAS_RUST_EXT` on every hot path method call (like telemetry `bump()`) introduces unnecessary overhead. When an extension is optional, module-level variables aliasing the function directly (e.g., `_bump = None` or `_bump = rs_gfxgraph_stats.bump`) eliminates the conditional check and branch, yielding a small measurable improvement in hot loops.
+**Action:** Prefer caching callables via global variables during import rather than doing boolean checks at runtime inside hot path functions.
