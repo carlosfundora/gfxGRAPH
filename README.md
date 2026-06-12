@@ -351,14 +351,15 @@ Build `libhipgraph_bridge.so` (see Tier 2 above) only if you need the 2 extra na
 
 ---
 
-## Current Capabilities & Performance (v0.3.1)
+## Current Capabilities & Performance (v0.3.2)
 
 ### Verified capability snapshot
 
 - `BridgedCUDAGraph` capture/replay works on gfx1030 with eager fallback safety.
 - Dynamic-shape `ShapeBucketPool` capture/replay works across bucketed batch sizes.
 - `ConditionalGraph` branch capture/replay works with fallback on per-branch failure.
-- Rust companion modules (`rs_gfxgraph`, `rs_gfxgraph_stats`) are optional, but when present they are used for router/validator/stats fast paths.
+- Optional Rust modules (`rs_gfxgraph_core`, `rs_gfxgraph_toolbox`, `gfxgraph_rs`, `gfxgraph_stats_rs`) accelerate router/validator/stats fast paths and provide pure-Rust architectural contracts without native overhead.
+- Includes explicitly tuned RDNA2 (gfx1030) `deepspeed-hip` inference kernels (layer norm, rms norm, tiled linear) and Triton kernels.
 
 ### Public benchmark (RX 6700 XT / gfx1030, ROCm 7.2, torch 2.11.0+rocm7.2)
 
