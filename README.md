@@ -2,9 +2,9 @@
   <img src="docs/assets/gfxgraph-logo.png" alt="gfxGRAPH logo" width="600" />
 </p>
 
-# gfxGRAPH v0.3.1
+# gfxGRAPH v0.3.2
 
-Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2). gfxGRAPH provides production-safe graph capture/replay with eager fallback, dynamic-shape bucketing, validation, and optional native acceleration paths.
+Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2), featuring DeepSpeed-HIP inference kernels, safe eager fallback, dynamic-shape bucketing, and pure-Rust architectural contracts.
 
 ## At a Glance
 

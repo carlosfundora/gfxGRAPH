@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [Unreleased] - 2026-06-12
+## [0.3.2] - 2026-06-12
 
 ### Added
 - Integrated `deepspeed-hip` kernels (fused layer norm, RMS norm, tiled linear) explicitly optimized for RDNA2.

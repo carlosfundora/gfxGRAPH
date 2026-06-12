@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools>=68.0"]
+requires = ["setuptools>=68.0", "setuptools-rust"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "gfxgraph"
-version = "0.3.1"
-description = "Drop-in CUDA Graph parity for AMD gfx1030 RDNA2"
+version = "0.3.2"
+description = "Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2), featuring DeepSpeed-HIP inference kernels, safe eager fallback, dynamic-shape bucketing, and pure-Rust architectural contracts."
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "MIT"}
