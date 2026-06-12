@@ -2,24 +2,31 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.4] - 2026-06-12
+
+### Added
+- Integrated pure-Rust companion crates `rs_gfxgraph_core` and `rs_gfxgraph_toolbox` into the `rust/` directory, stripping out irrelevant "federation" terminology.
+
+### Fixed
+- **Packaging/Build**: Fully consolidated the CMake and Rust build pipelines into a single `setup.py` that builds both the `libhipgraph_bridge.so` native bridge and the Rust extensions using `scikit-build-core` + `setuptools-rust`. Fixed `MANIFEST.in` to include headers and Rust source.
+- **Memory Safety**: Restored `torch.cuda.graph_pool_handle()` usage in `ShapeBucketPool` and `ConditionalGraph` to prevent cross-branch and shape-bucket aliasing crashes.
+- **Rust/Python Parity**: Aligned the Rust `BucketRouter` signature to return `(-1, 2)` for oversized inputs instead of raising `ValueError`, ensuring exact parity with the Python router fallback.
+- **Structural Fallback Metrics**: `fallback_count` is now accurately bumped on structural transitions (when a branch/bucket fails for the first time) rather than incorrectly inflating on every eager replay iteration.
+- **Strict Typing**: Replaced duck-typed tensor checking (`is_cuda`) in the Rust bridge with strict PyO3 type verification (`is_instance`).
+- **Exception Forwarding**: The Rust PyO3 interoperability layer now forwards Python exception types, values, and tracebacks into the `torch.no_grad.__exit__` context block.
+
 ## [0.3.2] - 2026-06-12
 
 ### Added
 - Integrated `deepspeed-hip` kernels (fused layer norm, RMS norm, tiled linear) explicitly optimized for RDNA2.
 - Integrated Triton RDNA2 kernels into `kernels/rdna2`.
-- Ported the lightweight pure-Rust federation crates (`rs_gfxgraph_core` and `rs_gfxgraph_toolbox`) to the hybrid branches to provide zero-cost architectural contracts.
 
 ### Fixed
+- **Shape Pool Propagation**: Fixed data propagation so inputs actually flow into the shape-pool during replay.
 - **Timing & Performance**: Added explicit `torch.cuda.synchronize()` calls before and after graph replay to accurately capture GPU time.
-- **Eager Fallback Safety**: Implemented a graceful eager fallback for oversized input shapes by intercepting shape bucket boundaries, preventing `ValueError` panics that terminated SGLang.
 - **Memory Safety**: Resolved a cross-branch aliasing crash in `ConditionalGraph` by properly allocating dedicated memory pools per branch (`torch.cuda.graph_pool_handle()`).
-- **Rust/PyO3 Exception Handling**: The PyO3 interoperability layer now correctly extracts and forwards Python exception types, values, and tracebacks into the `torch.no_grad.__exit__` context block, preventing silence on failures.
-- **Strict Typing**: Replaced unsafe duck-typed tensor checks (`is_cuda`) in the Rust bridge with strict `is_instance` PyO3 type verification.
-- **Native Initialization Safety**: explicitly defined `argtypes` and `restype` for native C functions and deferred `ctypes` loading to prevent early initialization crashes.
-- **Cold Starts**: Integrated a warmup cycle in `_enable.py` healthchecks before verification.
-
-### Removed
-- Removed the deprecated PyTorch C++ native sources (`src/` directory) to rely exclusively on the pure Rust bridge crates.
+- **CI Security**: Guarded self-hosted runner pipelines against execution from fork PRs.
+- **Packaging**: Deleted `setup.py` so the root project can be correctly installed as pure-Python.
 
 ## [0.3.1] - 2026-05-17
 

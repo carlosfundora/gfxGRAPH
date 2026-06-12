@@ -22,31 +22,27 @@ impl BucketRouter {
         }
     }
 
-    fn route(&self, input_size: usize) -> PyResult<(usize, u8)> {
-        let bucket = match self.buckets.binary_search(&input_size) {
+    fn route(&self, input_size: usize) -> PyResult<(i64, u8)> {
+        let bucket_val = match self.buckets.binary_search(&input_size) {
             Ok(idx) => self.buckets[idx],
             Err(idx) => {
                 if idx < self.buckets.len() {
                     self.buckets[idx]
                 } else {
-                    return Err(PyValueError::new_err(format!(
-                        "Input size {} exceeds largest bucket {}. Add a larger bucket.",
-                        input_size,
-                        self.buckets.last().unwrap_or(&0)
-                    )));
+                    return Ok((-1, 2));
                 }
             }
         };
 
-        let state = if self.warmed_up.contains(&bucket) {
+        let state = if self.warmed_up.contains(&bucket_val) {
             0 // Ready
-        } else if self.failed_buckets.contains(&bucket) {
+        } else if self.failed_buckets.contains(&bucket_val) {
             2 // Failed
         } else {
             1 // NeedsWarmup
         };
 
-        Ok((bucket, state))
+        Ok((bucket_val as i64, state))
     }
 
     fn mark_warmed_up(&mut self, bucket_size: usize) {
@@ -120,8 +116,9 @@ impl ConditionalGraphRunner {
         }
 
         if let Some(ref input) = input_tensor {
-            let is_tensor = input.getattr(py, "is_cuda").is_ok();
-            if !is_tensor {
+            let torch_mod = py.import("torch")?;
+            let tensor_cls = torch_mod.getattr("Tensor")?;
+            if !input.bind(py).is_instance(&tensor_cls)? {
                 return Err(PyTypeError::new_err("input_tensor must be a torch.Tensor"));
             }
             let is_cuda: bool = input.getattr(py, "is_cuda")?.extract(py)?;
@@ -157,7 +154,11 @@ impl ConditionalGraphRunner {
                 logger.call_method1("warning", (format!("Replay failed for branch '{}': {:?} — eager fallback", branch, e),))?;
 
                 if let Ok(mut lock) = self.failed_branches.write() {
-                    lock.insert(branch.to_string());
+                    if lock.insert(branch.to_string()) {
+                        if let Ok(enable_mod) = py.import("gfxgraph._enable") {
+                            let _ = enable_mod.call_method1("bump", ("fallback_count",));
+                        }
+                    }
                 }
                 return self.eager_fallback(py, branch, input_tensor);
             }
@@ -184,9 +185,7 @@ impl ConditionalGraphRunner {
             .map_err(|_| PyRuntimeError::new_err("Invalid state: branches_callbacks must be a dict"))?;
         let fn_obj = callbacks_dict.get_item(branch)?.ok_or_else(|| PyRuntimeError::new_err("Branch fallback not found"))?;
 
-        if let Ok(enable_mod) = py.import("gfxgraph._enable") {
-            let _ = enable_mod.call_method1("bump", ("fallback_count",));
-        }
+        // We no longer bump fallback_count here, it's structurally bumped on transition.
 
         let torch_mod = py.import("torch")?;
         let no_grad_ctx = torch_mod.call_method0("no_grad")?;
@@ -208,9 +207,13 @@ impl ConditionalGraphRunner {
                 Ok(val.into())
             }
             Err(e) => {
-                // We just let the exception propagate, torch.no_grad.__exit__ must be called
-                // Since we don't have the traceback, we'll just pass None for all.
-                let _ = no_grad_ctx.call_method1("__exit__", (py.None(), py.None(), py.None()));
+                let exc_type = e.get_type(py).into_any().unbind();
+                let exc_value = e.value(py).clone().into_any().unbind();
+                let exc_traceback = match e.traceback(py) {
+                    Some(tb) => tb.clone().into_any().unbind(),
+                    None => py.None(),
+                };
+                let _ = no_grad_ctx.call_method1("__exit__", (exc_type, exc_value, exc_traceback));
                 return Err(e);
             }
         }

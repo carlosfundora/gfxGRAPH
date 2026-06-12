@@ -87,6 +87,12 @@ jobs:
           uv venv || true
           uv pip install -e .
 
+      - name: Maturin build smoke test
+        run: |
+          uv pip install maturin
+          uv run maturin build --manifest-path rust/rs_gfxgraph/Cargo.toml
+          uv run maturin build --manifest-path rust/rs_gfxgraph_stats/Cargo.toml
+
       - name: Import smoke
         run: uv run python -c "import gfxgraph; print(gfxgraph.__version__)"
 

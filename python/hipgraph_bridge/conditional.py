@@ -165,7 +165,10 @@ class ConditionalGraph:
             self._graphs[branch].replay()
         except Exception as e:
             _log.warning("Replay failed for branch '%s': %s — eager fallback", branch, e)
-            self._failed_branches.add(branch)
+            if branch not in self._failed_branches:
+                self._failed_branches.add(branch)
+                if _bump is not None:
+                    _bump("fallback_count")
             return self._eager_fallback(branch, input_tensor)
 
         if _record_replay_us is not None:
@@ -178,8 +181,6 @@ class ConditionalGraph:
         """Run branch function eagerly."""
         fn = self._branches[branch]
         _log.debug("Eager fallback for branch '%s'", branch)
-        if _bump is not None:
-            _bump("fallback_count")
 
         if input_tensor is not None:
             with torch.no_grad():

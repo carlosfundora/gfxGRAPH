@@ -1,0 +1,16 @@
+[package]
+name = "rs_gfxgraph_toolbox"
+version = "0.1.0"
+edition = "2021"
+description = "Policy-free developer toolbox for gfxGRAPH geometry, shape, layout, and wave contracts"
+
+[lib]
+name = "rs_gfxgraph_toolbox"
+path = "src/lib.rs"
+
+[dependencies]
+rs_gfxgraph_core = { path = "../rs_gfxgraph_core", default-features = false }
+serde = { version = "1.0", features = ["derive"] }
+
+[lints]
+workspace = true

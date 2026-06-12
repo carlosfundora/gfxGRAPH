@@ -4,6 +4,10 @@ from gfxgraph._enable import bump, record_replay_us, stats, _HAS_RUST_STATS
 def test_rust_stats_available():
     assert _HAS_RUST_STATS is True, "Rust stats module should be loaded"
 
+pytestmark = pytest.mark.skipif(
+    not _HAS_RUST_STATS, reason="Rust stats module not installed (Tier 1 mode)"
+)
+
 def test_bump():
     from rs_gfxgraph_stats import reset
     reset()

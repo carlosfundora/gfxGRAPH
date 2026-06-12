@@ -2,7 +2,7 @@
   <img src="docs/assets/gfxgraph-logo.png" alt="gfxGRAPH logo" width="600" />
 </p>
 
-# gfxGRAPH v0.3.2
+# gfxGRAPH v0.3.4
 
 Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2), featuring DeepSpeed-HIP inference kernels, safe eager fallback, dynamic-shape bucketing, and pure-Rust architectural contracts.
 
@@ -68,6 +68,17 @@ python3 -c "import gfxgraph; print(gfxgraph.health_check())"
 
 Expected result:
 - `native_bridge: True`
+
+### Building the Rust Accelerators
+
+The Rust crates (`rs_gfxgraph`, `rs_gfxgraph_stats`) provide zero-cost architectural contracts and fast-paths for graph routing. To build them from source during development:
+
+```bash
+# Ensure maturin is installed via your environment manager (e.g., uv)
+# Build and install into the current environment
+maturin develop --release --manifest-path rust/rs_gfxgraph/Cargo.toml
+maturin develop --release --manifest-path rust/rs_gfxgraph_stats/Cargo.toml
+```
 
 ---
 
@@ -351,14 +362,13 @@ Build `libhipgraph_bridge.so` (see Tier 2 above) only if you need the 2 extra na
 
 ---
 
-## Current Capabilities & Performance (v0.3.2)
+## Current Capabilities & Performance (v0.3.4)
 
 ### Verified capability snapshot
 
 - `BridgedCUDAGraph` capture/replay works on gfx1030 with eager fallback safety.
 - Dynamic-shape `ShapeBucketPool` capture/replay works across bucketed batch sizes.
 - `ConditionalGraph` branch capture/replay works with fallback on per-branch failure.
-- Optional Rust modules (`rs_gfxgraph_core`, `rs_gfxgraph_toolbox`, `gfxgraph_rs`, `gfxgraph_stats_rs`) accelerate router/validator/stats fast paths and provide pure-Rust architectural contracts without native overhead.
 - Includes explicitly tuned RDNA2 (gfx1030) `deepspeed-hip` inference kernels (layer norm, rms norm, tiled linear) and Triton kernels.
 
 ### Public benchmark (RX 6700 XT / gfx1030, ROCm 7.2, torch 2.11.0+rocm7.2)

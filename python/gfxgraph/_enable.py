@@ -119,7 +119,7 @@ def enable(*, debug: bool = False, validate: bool = False) -> None:
         _log.setLevel(logging.DEBUG)
         os.environ["HGB_DEBUG"] = "1"
 
-    _log.info("Enabling gfxGRAPH v0.3.2 for gfx1030/RDNA2")
+    _log.info("Enabling gfxGRAPH v0.3.3 for gfx1030/RDNA2")
 
     # Try to init native bridge (non-fatal if .so not built)
     _init_native(debug)
@@ -227,7 +227,11 @@ def health_check() -> dict:
         g = torch.cuda.CUDAGraph()
         s = torch.cuda.Stream()
         with torch.cuda.stream(s):
+            # Warmup
+            for _ in range(3):
+                _ = x * 2
             torch.cuda.synchronize()
+            
             g.capture_begin()
             y = x * 2
             g.capture_end()

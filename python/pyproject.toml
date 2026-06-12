@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gfxgraph"
-version = "0.3.2"
+version = "0.3.3"
 description = "Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2), featuring DeepSpeed-HIP inference kernels, safe eager fallback, dynamic-shape bucketing, and pure-Rust architectural contracts."
 readme = "README.md"
 requires-python = ">=3.10"

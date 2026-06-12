@@ -1,0 +1,6 @@
+include CMakeLists.txt
+recursive-include src *
+recursive-include python/gfxgraph/_native *.so
+recursive-include include *
+recursive-include rust *
+include Cargo.toml Cargo.lock
