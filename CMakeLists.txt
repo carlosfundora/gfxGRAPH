@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 project(gfxGRAPH
-    VERSION 0.3.1
+    VERSION 0.3.4
     DESCRIPTION "CUDA Graph → HIP Graph translation layer for gfx1030 RDNA2"
     LANGUAGES CXX HIP
 )

@@ -7,15 +7,12 @@ edition = "2021"
 parking_lot = "0.12"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-rs_logly_mesh = { path = "../../core/rs_logly_mesh", optional = true }
-
-rs_policy_mesh = { path = "../../core/rs_policy_mesh", optional = true }
 [dev-dependencies]
 
 [features]
-default = ["mesh-aware", "policy"]
-mesh-aware = ["dep:rs_logly_mesh"]
-policy = ["dep:rs_policy_mesh"]
+default = []
+mesh-aware = []
+policy = []
 
 [lib]
 name = "rs_gfxgraph_core"

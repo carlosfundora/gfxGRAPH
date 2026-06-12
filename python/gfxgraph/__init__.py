@@ -12,7 +12,7 @@ Activation:
     # GFXGRAPH=validate python my_script.py
 """
 
-__version__ = "0.3.3"
+__version__ = "0.3.4"
 
 import os as _os
 import logging as _logging

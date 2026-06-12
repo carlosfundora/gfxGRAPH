@@ -31,7 +31,7 @@ extern "C" {
 
 #define HGB_VERSION_MAJOR 0
 #define HGB_VERSION_MINOR 3
-#define HGB_VERSION_PATCH 1
+#define HGB_VERSION_PATCH 4
 
 #define HGB_MAX_BRANCHES 32
 #define HGB_MAX_BUCKETS  64

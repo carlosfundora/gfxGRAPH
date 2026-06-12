@@ -1,10 +1,4 @@
-#[cfg(feature = "policy")]
-pub mod policy_contract;
-#[cfg(feature = "policy")]
 pub mod settings;
-#[cfg(feature = "policy")]
-pub use policy_contract::crate_policy_contract;
-#[cfg(feature = "policy")]
 pub use settings::CrateSettings;
 
 pub mod adapter;

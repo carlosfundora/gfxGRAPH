@@ -16,6 +16,12 @@ import time
 
 import torch
 
+from hipgraph_bridge.capture_safety import (
+    torch_graph_capture_block_reason,
+    torch_cuda_execution_error,
+    torch_cuda_execution_usable,
+    unsafe_torch_graph_capture_enabled,
+)
 from hipgraph_bridge.shape_bucketing import ShapeBucketPool
 
 try:
@@ -131,6 +137,8 @@ class BridgedCUDAGraph:
 
     def capture_begin(self, *args, **kwargs):
         """Start graph capture — delegates to real CUDAGraph."""
+        if not unsafe_torch_graph_capture_enabled():
+            raise RuntimeError(torch_graph_capture_block_reason())
         if self._graph is None:
             self._graph = _OriginalCUDAGraph()
         self._graph.capture_begin(*args, **kwargs)
@@ -168,6 +176,8 @@ class BridgedCUDAGraph:
 
             # Standard capture path — with try/except for eager fallback
             try:
+                if not unsafe_torch_graph_capture_enabled():
+                    raise RuntimeError(torch_graph_capture_block_reason())
                 self.parent._graph = _OriginalCUDAGraph()
                 torch.cuda.synchronize()
                 self.parent._capture_ctx = torch.cuda.graph(
@@ -360,6 +370,15 @@ class BridgedCUDAGraph:
                 "Pass model_fn= to capture() for automatic fallback."
             )
         _log.debug("Running eager fallback")
+        if (
+            input_tensor is not None
+            and input_tensor.is_cuda
+            and not torch_cuda_execution_usable()
+        ):
+            raise RuntimeError(
+                "Cannot run eager fallback because CUDA/HIP execution is not usable: "
+                f"{torch_cuda_execution_error()}"
+            )
         if input_tensor is not None:
             return self._model_fn(input_tensor)
         return self._model_fn()

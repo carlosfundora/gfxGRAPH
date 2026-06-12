@@ -27,6 +27,13 @@ from typing import Callable, List, Optional, Tuple
 
 import torch
 
+from hipgraph_bridge.capture_safety import (
+    torch_graph_capture_block_reason,
+    torch_cuda_execution_error,
+    torch_cuda_execution_usable,
+    unsafe_torch_graph_capture_enabled,
+)
+
 try:
     from gfxgraph._enable import bump as _bump
 except ImportError:
@@ -80,8 +87,10 @@ class ShapeBucketPool:
             self._warmed_up = set()
             self._failed_buckets = set()  # buckets that failed capture
 
-        self._graphs = {}      # bucket_size → CUDAGraph
-        self._max_static_input = None
+        self._graphs = {}      # bucket_size -> CUDAGraph
+        self._graph_pools = {}  # bucket_size -> graph_pool_handle()
+        self._static_inputs = {}  # bucket_size -> static input tensor
+        self._max_static_input = None  # legacy alias for older callers
         self._static_outputs = {}  # bucket_size → static output tensor
         # Clone-free output materialization ring (automatic, no user config).
         self._output_slots = {}      # bucket_size -> List[Tensor]
@@ -166,6 +175,16 @@ class ShapeBucketPool:
             return False
         if self.model_fn is None:
             return False
+        if not unsafe_torch_graph_capture_enabled():
+            _log.warning(
+                "Graph capture skipped for bucket %d: %s",
+                bucket_size,
+                torch_graph_capture_block_reason(),
+            )
+            self._mark_failed(bucket_size)
+            if _bump is not None:
+                _bump("fallback_count")
+            return False
 
         clear_cache = False
         if self._cached_vram is None:
@@ -178,18 +197,18 @@ class ShapeBucketPool:
 
             device = torch.device("cuda")
 
-            # Check if we need to initialize or resize the shared max static input
-            max_bucket = self.buckets[-1]
-            if self._max_static_input is None:
+            if bucket_size not in self._static_inputs:
                 if example_input is not None and isinstance(example_input, torch.Tensor):
                     shape = list(example_input.shape)
-                    shape[0] = max_bucket
-                    self._max_static_input = torch.zeros(shape, dtype=example_input.dtype, device=device)
+                    shape[0] = bucket_size
+                    static_input = torch.zeros(shape, dtype=example_input.dtype, device=device)
                 else:
-                    self._max_static_input = torch.zeros(max_bucket, device=device)
-
-            # Use a slice of the max static input for this bucket's capture
-            static_input = self._max_static_input[:bucket_size]
+                    static_input = torch.zeros(bucket_size, device=device)
+                self._static_inputs[bucket_size] = static_input
+                if self._max_static_input is None or bucket_size == self.buckets[-1]:
+                    self._max_static_input = static_input
+            else:
+                static_input = self._static_inputs[bucket_size]
 
             # Warmup run (required before capture)
             torch.cuda.synchronize()
@@ -199,7 +218,9 @@ class ShapeBucketPool:
 
             # Capture
             graph = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(graph, pool=None):
+            pool = torch.cuda.graph_pool_handle()
+            self._graph_pools[bucket_size] = pool
+            with torch.cuda.graph(graph, pool=pool):
                 static_output = self.model_fn(static_input)
 
             self._graphs[bucket_size] = graph
@@ -218,6 +239,10 @@ class ShapeBucketPool:
             # Clean up partial state
             self._static_outputs.pop(bucket_size, None)
             self._graphs.pop(bucket_size, None)
+            self._graph_pools.pop(bucket_size, None)
+            self._static_inputs.pop(bucket_size, None)
+            if _bump is not None:
+                _bump("fallback_count")
             return False
         finally:
             if clear_cache:
@@ -272,16 +297,16 @@ class ShapeBucketPool:
         if state == 1:
             if not self._capture_bucket(bucket, input_tensor):
                 # Capture failed or VRAM exceeded — eager fallback
-                return self._eager_fallback(input_tensor, input_size)
+                return self._eager_fallback(input_tensor, input_size, bump=False)
         elif state == 2:
-            return self._eager_fallback(input_tensor, input_size)
+            return self._eager_fallback(input_tensor, input_size, bump=False)
 
         if bucket not in self._graphs:
-            return self._eager_fallback(input_tensor, input_size)
+            return self._eager_fallback(input_tensor, input_size, bump=False)
 
         # Copy input to static buffer (only input_size elements)
         if input_tensor is not None:
-            static_in = self._max_static_input[:bucket]
+            static_in = self._static_inputs[bucket]
             static_in[:input_size].copy_(input_tensor[:input_size])
             if input_size < bucket:
                 static_in[input_size:].zero_()  # Zero-pad
@@ -360,15 +385,20 @@ class ShapeBucketPool:
             self._copy_fastpath_disabled.add(bucket_size)
             return static_out[:input_size].clone()
 
-    def _eager_fallback(self, input_tensor, input_size):
+    def _eager_fallback(self, input_tensor, input_size, *, bump: bool = True):
         """Run model eagerly when graph isn't available."""
         if self.model_fn is None:
             raise RuntimeError(
                 "No graph available and no model_fn for eager fallback"
             )
         _log.debug("Shape pool eager fallback for size %d", input_size)
-        if _bump is not None:
+        if bump and _bump is not None:
             _bump("fallback_count")
+        if input_tensor is not None and input_tensor.is_cuda and not torch_cuda_execution_usable():
+            raise RuntimeError(
+                "Cannot run eager fallback because CUDA/HIP execution is not usable: "
+                f"{torch_cuda_execution_error()}"
+            )
 
         if input_tensor is not None:
             with torch.no_grad():
@@ -382,15 +412,10 @@ class ShapeBucketPool:
     def memory_overhead(self) -> int:
         """Total GPU memory used by all bucket graphs (bytes)."""
         total = 0
-        if self._max_static_input is not None:
-            total += self._max_static_input.nelement() * self._max_static_input.element_size()
-        # With CUDA graph pools, output memory is reused across buckets.
-        # We approximate it by taking the max size.
-        max_out = 0
+        for static_input in self._static_inputs.values():
+            total += static_input.nelement() * static_input.element_size()
         for out in self._static_outputs.values():
-            sz = out.nelement() * out.element_size()
-            if sz > max_out: max_out = sz
-        total += max_out
+            total += out.nelement() * out.element_size()
         for slots in self._output_slots.values():
             for slot in slots:
                 total += slot.nelement() * slot.element_size()

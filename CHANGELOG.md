@@ -8,8 +8,8 @@ All notable changes to this project are documented in this file.
 - Integrated pure-Rust companion crates `rs_gfxgraph_core` and `rs_gfxgraph_toolbox` into the `rust/` directory, stripping out irrelevant "federation" terminology.
 
 ### Fixed
-- **Packaging/Build**: Fully consolidated the CMake and Rust build pipelines into a single `setup.py` that builds both the `libhipgraph_bridge.so` native bridge and the Rust extensions using `scikit-build-core` + `setuptools-rust`. Fixed `MANIFEST.in` to include headers and Rust source.
-- **Memory Safety**: Restored `torch.cuda.graph_pool_handle()` usage in `ShapeBucketPool` and `ConditionalGraph` to prevent cross-branch and shape-bucket aliasing crashes.
+- **Packaging/Build**: Fully consolidated the CMake and Rust build pipelines into a single setuptools `setup.py` that builds both the `libhipgraph_bridge.so` native bridge and the Rust extensions using `setuptools-rust`. Fixed `MANIFEST.in` to include headers and Rust source.
+- **Memory Safety**: Restored dedicated `torch.cuda.graph_pool_handle()` usage in `ShapeBucketPool` and `ConditionalGraph` when capture is explicitly enabled. On ROCm/HIP, Python bridge capture now fails closed by default to avoid process-level segmentation faults observed before Python can catch an exception; low-level callers receive `RuntimeError` instead of entering the unsafe PyTorch capture path.
 - **Rust/Python Parity**: Aligned the Rust `BucketRouter` signature to return `(-1, 2)` for oversized inputs instead of raising `ValueError`, ensuring exact parity with the Python router fallback.
 - **Structural Fallback Metrics**: `fallback_count` is now accurately bumped on structural transitions (when a branch/bucket fails for the first time) rather than incorrectly inflating on every eager replay iteration.
 - **Strict Typing**: Replaced duck-typed tensor checking (`is_cuda`) in the Rust bridge with strict PyO3 type verification (`is_instance`).

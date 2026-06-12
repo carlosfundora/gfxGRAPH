@@ -119,7 +119,7 @@ def enable(*, debug: bool = False, validate: bool = False) -> None:
         _log.setLevel(logging.DEBUG)
         os.environ["HGB_DEBUG"] = "1"
 
-    _log.info("Enabling gfxGRAPH v0.3.3 for gfx1030/RDNA2")
+    _log.info("Enabling gfxGRAPH v0.3.4 for gfx1030/RDNA2")
 
     # Try to init native bridge (non-fatal if .so not built)
     _init_native(debug)
@@ -221,6 +221,24 @@ def health_check() -> dict:
             result["vram_free_mb"] = round(free / (1024 * 1024))
         except Exception:
             pass
+
+        from hipgraph_bridge.capture_safety import (
+            torch_cuda_execution_error,
+            torch_cuda_execution_usable,
+            unsafe_torch_graph_capture_enabled,
+        )
+
+        if not torch_cuda_execution_usable():
+            result["details"] = torch_cuda_execution_error()
+            return result
+
+        if not unsafe_torch_graph_capture_enabled():
+            result["ok"] = True
+            result["details"] = (
+                "CUDA/HIP execution probe passed; high-level torch graph "
+                "capture is disabled by default on this ROCm runtime"
+            )
+            return result
 
         # Test basic graph capture/replay
         x = torch.ones(4, device="cuda")

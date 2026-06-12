@@ -1,5 +1,22 @@
 [workspace]
+resolver = "2"
 members = [
     "rust/rs_gfxgraph",
-    "rust/rs_gfxgraph_stats"
+    "rust/rs_gfxgraph_core",
+    "rust/rs_gfxgraph_stats",
+    "rust/rs_gfxgraph_toolbox",
 ]
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+unused_lifetimes = "warn"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "warn"
+bare_urls = "warn"
+
+[workspace.lints.clippy]
+checked_conversions = "warn"
+dbg_macro = "warn"
+todo = "warn"
+undocumented_unsafe_blocks = "allow"

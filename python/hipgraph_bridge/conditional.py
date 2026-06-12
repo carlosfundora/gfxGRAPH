@@ -16,6 +16,13 @@ import time
 import torch
 from typing import Callable, Dict, Optional
 
+from hipgraph_bridge.capture_safety import (
+    torch_graph_capture_block_reason,
+    torch_cuda_execution_error,
+    torch_cuda_execution_usable,
+    unsafe_torch_graph_capture_enabled,
+)
+
 try:
     import rs_gfxgraph as _rs_gfxgraph
 except Exception:
@@ -56,6 +63,7 @@ class ConditionalGraph:
     def __init__(self):
         self._branches: Dict[str, Callable] = {}
         self._graphs: Dict[str, torch.cuda.CUDAGraph] = {}
+        self._graph_pools: Dict[str, object] = {}
         self._shared_input: Optional[torch.Tensor] = None
         self._static_outputs: Dict[str, torch.Tensor] = {}
         self._captured = False
@@ -87,6 +95,9 @@ class ConditionalGraph:
 
         for name, fn in self._branches.items():
             try:
+                if not unsafe_torch_graph_capture_enabled():
+                    raise RuntimeError(torch_graph_capture_block_reason())
+
                 # Warmup
                 torch.cuda.synchronize()
                 with torch.no_grad():
@@ -95,7 +106,9 @@ class ConditionalGraph:
 
                 # Capture
                 graph = torch.cuda.CUDAGraph()
-                with torch.cuda.graph(graph, pool=None):
+                pool = torch.cuda.graph_pool_handle()
+                self._graph_pools[name] = pool
+                with torch.cuda.graph(graph, pool=pool):
                     static_output = fn(self._shared_input)
 
                 self._graphs[name] = graph
@@ -108,6 +121,7 @@ class ConditionalGraph:
                     name, e,
                 )
                 self._failed_branches.add(name)
+                self._graph_pools.pop(name, None)
                 if _bump is not None:
                     _bump("fallback_count")
 
@@ -182,9 +196,19 @@ class ConditionalGraph:
         _log.debug("Eager fallback for branch '%s'", branch)
 
         if input_tensor is not None:
+            if input_tensor.is_cuda and not torch_cuda_execution_usable():
+                raise RuntimeError(
+                    "Cannot run eager fallback because CUDA/HIP execution is not usable: "
+                    f"{torch_cuda_execution_error()}"
+                )
             with torch.no_grad():
                 return fn(input_tensor)
         elif self._shared_input is not None:
+            if self._shared_input.is_cuda and not torch_cuda_execution_usable():
+                raise RuntimeError(
+                    "Cannot run eager fallback because CUDA/HIP execution is not usable: "
+                    f"{torch_cuda_execution_error()}"
+                )
             with torch.no_grad():
                 return fn(self._shared_input)
         else:
