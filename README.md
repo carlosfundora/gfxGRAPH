@@ -219,8 +219,8 @@ export GFXGRAPH=validate
 # Optional: debug logging
 export GFXGRAPH=debug
 
-# Optional: VRAM cap for graph capture scratch (default 0.90 = 90% of total)
-export GFXGRAPH_VRAM_CAP=0.90
+# Optional: VRAM cap for graph capture scratch (default 0.80 = 80% of total)
+export GFXGRAPH_VRAM_CAP=0.80
 
 # Optional: replay hot mode (skips replay-path diagnostics for lowest overhead)
 export GFXGRAPH_REPLAY_HOT_MODE=1
@@ -244,7 +244,7 @@ python3 -m sglang.launch_server --model-path <model> ...
 
 SGLang logs gfxGRAPH status at startup:
 ```
-INFO: gfxGRAPH v0.3.1 enabled (mode=normal, vram_cap=0.90)
+INFO: gfxGRAPH v0.3.1 enabled (mode=normal, vram_cap=0.80)
 INFO: gfxGRAPH health check passed: AMD Radeon RX 6700 XT (gfx1030), VRAM 10240MB free / 12288MB total
 ```
 
@@ -372,21 +372,23 @@ PYTHONPATH=python python benchmarks/bench_readme_public.py \
 
 Results from `benchmarks/results/readme_benchmark_latest.json` (**standard mode**):
 
-| Workload | Eager (ms/iter) | Graph (ms/iter) | Speedup |
+| Workload | Eager (ms/iter) | Graph (ms/iter) | Status |
 |---|---:|---:|---:|
-| decode_like_layernorm_gelu_chain_bs1_d1024 | 0.1395 | **0.1276** | **1.09x** |
-| mlp_bs32_d1024 | 0.1023 | 0.1028 | 1.00x |
-| mlp_bs128_d2048 | 0.6128 | 0.6157 | 1.00x |
+| decode_like_layernorm_gelu_chain_bs1_d1024 | 0.1395 | **0.1276** | **1.09x gain** |
+| mlp_bs32_d1024 | 0.1023 | 0.1028 | 1.00x parity |
+| mlp_bs128_d2048 | 0.6128 | 0.6157 | 1.00x parity |
 
 Optional with `GFXGRAPH_REPLAY_HOT_MODE=1`:
 
-| Workload | Eager (ms/iter) | Graph (ms/iter) | Speedup |
+| Workload | Eager (ms/iter) | Graph (ms/iter) | Status |
 |---|---:|---:|---:|
-| decode_like_layernorm_gelu_chain_bs1_d1024 | 0.1378 | **0.1335** | **1.03x** |
-| mlp_bs32_d1024 | 0.1022 | 0.1032 | 0.99x |
-| mlp_bs128_d2048 | 0.6130 | 0.6138 | 1.00x |
+| decode_like_layernorm_gelu_chain_bs1_d1024 | 0.1378 | **0.1335** | **1.03x gain** |
+| mlp_bs32_d1024 | 0.1022 | 0.1032 | 0.99x parity |
+| mlp_bs128_d2048 | 0.6130 | 0.6138 | 1.00x parity |
 
 Interpretation:
+- **Stability and Parity:** The primary value is crash-free graph behavior with eager fallback safety.
+- **Modest Gains:** We see modest performance gains on launch-bound decode workloads (e.g., 1.09x), with exact parity on compute-bound tasks, as expected on RDNA2.
 - Standard mode now uses trusted replay promotion with sampled diagnostics and preserved eager fallback safety.
 - Hot replay mode remains available when you want the leanest replay path and can accept reduced replay-path diagnostics.
 - All measured runs above completed with `fallback: false` (successful graph replay path).

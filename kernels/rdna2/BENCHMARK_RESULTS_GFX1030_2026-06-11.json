@@ -1,0 +1,300 @@
+{
+  "env": {
+    "gpu_name": "AMD Radeon RX 6700 XT",
+    "torch": "2.13.0a0+git53bbebe",
+    "hip": "7.2.26015",
+    "triton": "3.7.0",
+    "cuda_available": true,
+    "HSA_OVERRIDE_GFX_VERSION": null,
+    "HIP_VISIBLE_DEVICES": "0",
+    "date": "2026-06-11",
+    "gpu_native_arch": "gfx1031 (Navi 22)",
+    "benchmark_method": "torch.cuda.Event, 10 warmup + 100 timed iters, median + p90",
+    "caveats": [
+      "Box-default HSA_OVERRIDE_GFX_VERSION=10.3.0 SEGFAULTS torch 2.13/ROCm 7.2 GPU compute (reproduced 8x). Benchmarks ran with the override UNSET (native gfx1031).",
+      "GPU is gfx1031, not gfx1030; the 4 HIP kernels hardcode --offload-arch=gfx1030 and aiter rejects gfx1031 \u2014 ran with GPU_ARCHS=gfx1030 shim (same gfx10.3 ISA; verified a gfx1030 binary runs correctly on this hardware).",
+      "rmsnorm/rope/fp8_dequant/fused_qknorm_rope are HIP C++ (torch cpp_extension), not Triton. snake_activation is genuine Triton."
+    ]
+  },
+  "kernels": [
+    {
+      "kernel": "fp8_dequant",
+      "subject": "rdna2/fp8_dequant.py",
+      "dtype": "torch.float16",
+      "shape": [
+        4096,
+        4096
+      ],
+      "correctness_pass": false,
+      "max_abs_err": 24.0,
+      "eager_median_ms": 11.08381,
+      "eager_p90_ms": 11.62676,
+      "kernel_median_ms": 0.205,
+      "kernel_p90_ms": 0.22228,
+      "speedup": 54.067,
+      "verdict": "REJECT (incorrect)",
+      "note": ""
+    },
+    {
+      "kernel": "fp8_dequant",
+      "subject": "rdna2/fp8_dequant.py",
+      "dtype": "torch.float16",
+      "shape": [
+        4096,
+        11008
+      ],
+      "correctness_pass": false,
+      "max_abs_err": 24.0,
+      "eager_median_ms": 29.77394,
+      "eager_p90_ms": 30.50873,
+      "kernel_median_ms": 0.70587,
+      "kernel_p90_ms": 0.71017,
+      "speedup": 42.18,
+      "verdict": "REJECT (incorrect)",
+      "note": ""
+    },
+    {
+      "kernel": "fp8_dequant",
+      "subject": "rdna2/fp8_dequant.py",
+      "dtype": "torch.float16",
+      "shape": [
+        11008,
+        4096
+      ],
+      "correctness_pass": false,
+      "max_abs_err": 24.0,
+      "eager_median_ms": 29.7805,
+      "eager_p90_ms": 30.54965,
+      "kernel_median_ms": 0.70349,
+      "kernel_p90_ms": 0.81193,
+      "speedup": 42.332,
+      "verdict": "REJECT (incorrect)",
+      "note": ""
+    },
+    {
+      "kernel": "fused_qknorm_rope",
+      "subject": "rdna2/fused_qknorm_rope.py",
+      "dtype": "torch.float16",
+      "shape": [
+        1,
+        48,
+        128
+      ],
+      "correctness_pass": true,
+      "max_abs_err": 0.0,
+      "eager_median_ms": 0.37245,
+      "eager_p90_ms": 0.39017,
+      "kernel_median_ms": 0.00908,
+      "kernel_p90_ms": 0.01184,
+      "speedup": 41.018,
+      "verdict": "ADOPT",
+      "note": ""
+    },
+    {
+      "kernel": "fused_qknorm_rope",
+      "subject": "rdna2/fused_qknorm_rope.py",
+      "dtype": "torch.float16",
+      "shape": [
+        1024,
+        48,
+        128
+      ],
+      "correctness_pass": true,
+      "max_abs_err": 0.0078125,
+      "eager_median_ms": 0.73967,
+      "eager_p90_ms": 0.77525,
+      "kernel_median_ms": 0.06768,
+      "kernel_p90_ms": 0.06788,
+      "speedup": 10.929,
+      "verdict": "ADOPT",
+      "note": ""
+    },
+    {
+      "kernel": "fused_qknorm_rope",
+      "subject": "rdna2/fused_qknorm_rope.py",
+      "dtype": "torch.float16",
+      "shape": [
+        4096,
+        48,
+        128
+      ],
+      "correctness_pass": true,
+      "max_abs_err": 0.0078125,
+      "eager_median_ms": 3.98817,
+      "eager_p90_ms": 4.55456,
+      "kernel_median_ms": 0.22728,
+      "kernel_p90_ms": 0.23296,
+      "speedup": 17.547,
+      "verdict": "ADOPT",
+      "note": ""
+    },
+    {
+      "kernel": "rmsnorm",
+      "subject": "rdna2/rmsnorm.py",
+      "dtype": "torch.float16",
+      "shape": [
+        1,
+        4096
+      ],
+      "correctness_pass": true,
+      "max_abs_err": 0.00390625,
+      "eager_median_ms": 0.0717,
+      "eager_p90_ms": 0.0954,
+      "kernel_median_ms": 0.01068,
+      "kernel_p90_ms": 0.01488,
+      "speedup": 6.714,
+      "verdict": "ADOPT",
+      "note": ""
+    },
+    {
+      "kernel": "rmsnorm",
+      "subject": "rdna2/rmsnorm.py",
+      "dtype": "torch.float16",
+      "shape": [
+        1024,
+        4096
+      ],
+      "correctness_pass": true,
+      "max_abs_err": 0.0078125,
+      "eager_median_ms": 0.20326,
+      "eager_p90_ms": 0.22092,
+      "kernel_median_ms": 0.0343,
+      "kernel_p90_ms": 0.04452,
+      "speedup": 5.926,
+      "verdict": "ADOPT",
+      "note": ""
+    },
+    {
+      "kernel": "rmsnorm",
+      "subject": "rdna2/rmsnorm.py",
+      "dtype": "torch.float16",
+      "shape": [
+        4096,
+        4096
+      ],
+      "correctness_pass": true,
+      "max_abs_err": 0.0078125,
+      "eager_median_ms": 1.81047,
+      "eager_p90_ms": 2.68765,
+      "kernel_median_ms": 0.09174,
+      "kernel_p90_ms": 0.09312,
+      "speedup": 19.734,
+      "verdict": "ADOPT",
+      "note": ""
+    },
+    {
+      "kernel": "rope",
+      "subject": "rdna2/rope.py",
+      "dtype": "torch.float16",
+      "shape": [
+        1,
+        32,
+        128
+      ],
+      "correctness_pass": true,
+      "max_abs_err": 0.0,
+      "eager_median_ms": 0.22124,
+      "eager_p90_ms": 0.25236,
+      "kernel_median_ms": 0.01326,
+      "kernel_p90_ms": 0.0142,
+      "speedup": 16.685,
+      "verdict": "ADOPT",
+      "note": ""
+    },
+    {
+      "kernel": "rope",
+      "subject": "rdna2/rope.py",
+      "dtype": "torch.float16",
+      "shape": [
+        1024,
+        32,
+        128
+      ],
+      "correctness_pass": false,
+      "max_abs_err": 7.34765625,
+      "eager_median_ms": 0.31315,
+      "eager_p90_ms": 0.42529,
+      "kernel_median_ms": 0.04148,
+      "kernel_p90_ms": 0.04204,
+      "speedup": 7.549,
+      "verdict": "REJECT (incorrect)",
+      "note": ""
+    },
+    {
+      "kernel": "rope",
+      "subject": "rdna2/rope.py",
+      "dtype": "torch.float16",
+      "shape": [
+        4096,
+        32,
+        128
+      ],
+      "correctness_pass": false,
+      "max_abs_err": 8.10546875,
+      "eager_median_ms": 1.03176,
+      "eager_p90_ms": 1.77619,
+      "kernel_median_ms": 0.11652,
+      "kernel_p90_ms": 0.21572,
+      "speedup": 8.855,
+      "verdict": "REJECT (incorrect)",
+      "note": ""
+    },
+    {
+      "kernel": "snake_activation",
+      "subject": "/home/local/ai/engines/gfxatom/atom/model_ops/rdna2/snake_activation.py",
+      "dtype": "torch.float32",
+      "shape": [
+        1,
+        512,
+        8192
+      ],
+      "correctness_pass": true,
+      "max_abs_err": 9.5367431640625e-07,
+      "eager_median_ms": 0.22282,
+      "eager_p90_ms": 0.2316,
+      "kernel_median_ms": 0.07998,
+      "kernel_p90_ms": 0.08596,
+      "speedup": 2.786,
+      "verdict": "ADOPT",
+      "note": ""
+    },
+    {
+      "kernel": "snake_activation",
+      "subject": "/home/local/ai/engines/gfxatom/atom/model_ops/rdna2/snake_activation.py",
+      "dtype": "torch.float32",
+      "shape": [
+        1,
+        1024,
+        2048
+      ],
+      "correctness_pass": true,
+      "max_abs_err": 4.76837158203125e-07,
+      "eager_median_ms": 0.13094,
+      "eager_p90_ms": 0.18964,
+      "kernel_median_ms": 0.05322,
+      "kernel_p90_ms": 0.06872,
+      "speedup": 2.46,
+      "verdict": "ADOPT",
+      "note": ""
+    },
+    {
+      "kernel": "snake_activation",
+      "subject": "/home/local/ai/engines/gfxatom/atom/model_ops/rdna2/snake_activation.py",
+      "dtype": "torch.float32",
+      "shape": [
+        1,
+        256,
+        16384
+      ],
+      "correctness_pass": true,
+      "max_abs_err": 9.5367431640625e-07,
+      "eager_median_ms": 0.22214,
+      "eager_p90_ms": 0.29952,
+      "kernel_median_ms": 0.06864,
+      "kernel_p90_ms": 0.09132,
+      "speedup": 3.236,
+      "verdict": "ADOPT",
+      "note": ""
+    }
+  ]
+}

@@ -60,7 +60,6 @@ class ConditionalGraph:
         self._static_outputs: Dict[str, torch.Tensor] = {}
         self._captured = False
         self._failed_branches: set = set()
-        self._mempool = torch.cuda.graph_pool_handle()
         self._rust_runner = None
 
     def add_branch(self, name: str, fn: Callable):
@@ -96,7 +95,8 @@ class ConditionalGraph:
 
                 # Capture
                 graph = torch.cuda.CUDAGraph()
-                with torch.cuda.graph(graph, pool=self._mempool):
+                branch_pool = torch.cuda.graph_pool_handle()
+                with torch.cuda.graph(graph, pool=branch_pool):
                     static_output = fn(self._shared_input)
 
                 self._graphs[name] = graph
@@ -198,4 +198,9 @@ class ConditionalGraph:
     @property
     def failed_branches(self) -> list:
         """List of branches that failed capture and use eager fallback."""
+        if self._rust_runner is not None and hasattr(self._rust_runner, "failed_branches"):
+            try:
+                return sorted(self._rust_runner.failed_branches())
+            except Exception:
+                pass
         return sorted(self._failed_branches)

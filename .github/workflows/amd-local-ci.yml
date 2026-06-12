@@ -84,7 +84,7 @@ jobs:
   amd-graph-smoke:
     name: AMD graph smoke
     needs: detect
-    if: github.event_name == 'workflow_dispatch' || needs.detect.outputs.amd == 'true' || needs.detect.outputs.graph == 'true'
+    if: (github.event_name == 'workflow_dispatch' || needs.detect.outputs.amd == 'true' || needs.detect.outputs.graph == 'true') && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, linux, x64, amd, rocm, hip, gfx1030]
     timeout-minutes: 45
     env:

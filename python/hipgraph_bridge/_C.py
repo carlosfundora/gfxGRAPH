@@ -11,7 +11,7 @@ import logging
 import os
 from pathlib import Path
 
-from gfxgraph._native import library_path as packaged_library_path
+
 
 _log = logging.getLogger("gfxgraph")
 _LIB_NAME = "libhipgraph_bridge.so"
@@ -27,6 +27,7 @@ def _find_lib():
             return str(p)
         _log.warning("GFXGRAPH_LIB=%s not found, searching defaults", explicit)
 
+    from gfxgraph._native import library_path as packaged_library_path
     packaged = packaged_library_path()
     if packaged is not None:
         return str(packaged)
@@ -45,13 +46,16 @@ def _find_lib():
             return str(candidate)
 
     # Fallback: let ctypes search system paths
-    return _LIB_NAME
+    return None
 
 
 try:
     _lib_path = _find_lib()
-    lib = ctypes.CDLL(_lib_path)
-    _log.debug("Loaded native bridge from %s", _lib_path)
+    if _lib_path is None:
+        lib = None
+    else:
+        lib = ctypes.CDLL(_lib_path)
+        _log.debug("Loaded native bridge from %s", _lib_path)
 except OSError:
     lib = None  # Bridge .so not built yet — Python-only mode
 

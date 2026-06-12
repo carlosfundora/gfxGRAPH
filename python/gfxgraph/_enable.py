@@ -224,6 +224,12 @@ def health_check() -> dict:
 
         # Test basic graph capture/replay
         x = torch.ones(4, device="cuda")
+        
+        # Warmup
+        torch.cuda.synchronize()
+        _ = x * 2
+        torch.cuda.synchronize()
+
         g = torch.cuda.CUDAGraph()
         s = torch.cuda.Stream()
         with torch.cuda.stream(s):

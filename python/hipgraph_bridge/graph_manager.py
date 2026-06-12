@@ -304,10 +304,14 @@ class BridgedCUDAGraph:
             return self._run_preferred_eager(input_tensor)
 
         # Shape bucketing path
-        if self._shape_pool is not None and batch_size is not None:
-            t0 = time.perf_counter()
-            result = self._shape_pool(batch_size)
+        if self._shape_pool is not None and (batch_size is not None or input_tensor is not None):
+            pool_arg = input_tensor if input_tensor is not None else batch_size
             if not _HOT_REPLAY_MODE:
+                torch.cuda.synchronize()
+            t0 = time.perf_counter()
+            result = self._shape_pool(pool_arg)
+            if not _HOT_REPLAY_MODE:
+                torch.cuda.synchronize()
                 self._record_replay_sample(t0)
             return self._maybe_validate(result, input_tensor)
 
@@ -319,6 +323,8 @@ class BridgedCUDAGraph:
             sample_diagnostics = True
             if _TRUSTED_REPLAY_THRESHOLD > 0 and self._trusted_replay_active:
                 sample_diagnostics = (self._trusted_replay_count % _TRUSTED_REPLAY_SAMPLE_INTERVAL) == 0
+            if sample_diagnostics:
+                torch.cuda.synchronize()
             t0 = time.perf_counter() if sample_diagnostics else 0.0
             try:
                 self._graph.replay()
@@ -335,6 +341,7 @@ class BridgedCUDAGraph:
             ):
                 self._trusted_replay_active = True
             if sample_diagnostics:
+                torch.cuda.synchronize()
                 self._record_replay_sample(t0)
                 if _ADAPTIVE_REPLAY_MODE:
                     self._maybe_update_adaptive_mode(input_tensor)
@@ -353,7 +360,6 @@ class BridgedCUDAGraph:
                 "Pass model_fn= to capture() for automatic fallback."
             )
         _log.debug("Running eager fallback")
-        _bump_fallback()
         if input_tensor is not None:
             return self._model_fn(input_tensor)
         return self._model_fn()
@@ -365,12 +371,14 @@ class BridgedCUDAGraph:
         return self._model_fn()
 
     def _run_eager_timed(self, input_tensor=None):
+        torch.cuda.synchronize()
         t0 = time.perf_counter()
         with torch.no_grad():
             if input_tensor is not None:
                 out = self._model_fn(input_tensor)
             else:
                 out = self._model_fn()
+        torch.cuda.synchronize()
         us = (time.perf_counter() - t0) * 1e6
         return out, us
 

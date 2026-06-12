@@ -233,10 +233,11 @@ class ShapeBucketPool:
 
         idx = bisect.bisect_left(self.buckets, input_size)
         if idx >= len(self.buckets):
-            raise ValueError(
-                f"Input size {input_size} exceeds largest bucket "
-                f"{self.buckets[-1]}. Add a larger bucket."
+            _log.warning(
+                "Input size %d exceeds largest bucket %d. Falling back to eager.",
+                input_size, self.buckets[-1]
             )
+            return -1, 2
         bucket = self.buckets[idx]
         if bucket in self._warmed_up:
             state = 0
