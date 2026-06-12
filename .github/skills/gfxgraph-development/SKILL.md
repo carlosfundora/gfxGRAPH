@@ -282,5 +282,6 @@ print(f"Avg replay: {s['avg_replay_us']:.1f} µs")
 
 ## Version History
 
-- **v0.3.0** — Current. SIGABRT fix, SGLang low-level API compat, VRAM safety, validation mode
+- **v0.3.4** — Current. Pure-Python base install (native bridge via the `native/` companion + source Rust crates), per-branch memory pools, accurate structural fallback metrics, RDNA2 DeepSpeed-HIP + Triton kernels, dynamic-shape and adaptive-replay fixes.
+- **v0.3.0** — SIGABRT fix, SGLang low-level API compat, VRAM safety, validation mode
 - **v0.1.0** — Initial. Basic BridgedCUDAGraph with eager fallback

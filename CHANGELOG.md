@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Packaging**: Restored the base `gfxgraph` package to a true pure-Python install (Tier 1). The 0.3.4 `setup.py`/`setuptools-rust` consolidation (below) had re-coupled the base install to a Rust + ROCm toolchain, contradicting the documented Tier 1 design and the `native/` companion that already builds `libhipgraph_bridge.so`. Native acceleration is again opt-in via the `native/` companion and source `rust/` crates; the runtime degrades gracefully when absent (`_HAS_*` guards).
+
 ## [0.3.4] - 2026-06-12
 
 ### Added

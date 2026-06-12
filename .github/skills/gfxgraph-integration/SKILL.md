@@ -32,7 +32,7 @@ pip install /path/to/gfxGRAPH/python/
 
 ```python
 import gfxgraph
-print(gfxgraph.__version__)       # → "0.3.0"
+print(gfxgraph.__version__)       # → "0.3.4"
 print(gfxgraph.health_check())    # → {'ok': True, 'gpu': 'AMD Radeon RX 6700 XT', ...}
 ```
 
