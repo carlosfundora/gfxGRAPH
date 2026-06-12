@@ -95,8 +95,7 @@ class ConditionalGraph:
 
                 # Capture
                 graph = torch.cuda.CUDAGraph()
-                branch_pool = torch.cuda.graph_pool_handle()
-                with torch.cuda.graph(graph, pool=branch_pool):
+                with torch.cuda.graph(graph, pool=None):
                     static_output = fn(self._shared_input)
 
                 self._graphs[name] = graph

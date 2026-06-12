@@ -88,7 +88,6 @@ class ShapeBucketPool:
         self._output_slot_refs = {}  # bucket_size -> List[weakref | None]
         self._output_slot_cursor = {}  # bucket_size -> next slot index
         self._copy_fastpath_disabled = set()  # bucket sizes forced to clone fallback
-        self._mempool = torch.cuda.graph_pool_handle()
 
         self._cached_vram = None
 
@@ -148,13 +147,10 @@ class ShapeBucketPool:
             self._warmed_up.add(bucket_size)
 
     def _mark_failed(self, bucket_size: int):
-        was_failed = self._is_failed(bucket_size)
         if self._router is not None:
             self._router.mark_failed(bucket_size)
         else:
             self._failed_buckets.add(bucket_size)
-        if not was_failed and _bump is not None:
-            _bump("fallback_count")
 
     def _capture_bucket(
         self,
@@ -203,7 +199,7 @@ class ShapeBucketPool:
 
             # Capture
             graph = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(graph, pool=self._mempool):
+            with torch.cuda.graph(graph, pool=None):
                 static_output = self.model_fn(static_input)
 
             self._graphs[bucket_size] = graph
@@ -371,6 +367,8 @@ class ShapeBucketPool:
                 "No graph available and no model_fn for eager fallback"
             )
         _log.debug("Shape pool eager fallback for size %d", input_size)
+        if _bump is not None:
+            _bump("fallback_count")
 
         if input_tensor is not None:
             with torch.no_grad():

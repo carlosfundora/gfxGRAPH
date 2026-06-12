@@ -1,0 +1,10 @@
+import torch
+print("Warmup alloc")
+torch.randn(1, 64, device="cuda")
+print("Calling pool handle")
+pool = torch.cuda.graph_pool_handle()
+print("Pool handle called, empty cache...")
+torch.cuda.empty_cache()
+print("Allocating memory...")
+x = torch.randn(1, 64, device="cuda")
+print("Memory allocated successfully")

@@ -1,0 +1,23 @@
+import sys
+import torch
+print("1")
+sys.stdout.flush()
+model = torch.nn.Linear(64, 64).cuda()
+print("2")
+sys.stdout.flush()
+x = torch.randn(1, 64, device="cuda")
+print("3")
+sys.stdout.flush()
+pool = torch.cuda.graph_pool_handle()
+print("Pool:", pool)
+sys.stdout.flush()
+g1 = torch.cuda.CUDAGraph()
+print("4")
+sys.stdout.flush()
+with torch.cuda.graph(g1, pool=pool):
+    out1 = model(x)
+print("Graph 1 captured")
+sys.stdout.flush()
+x2 = torch.randn(4, 64, device="cuda")
+print("x2 allocated")
+sys.stdout.flush()
