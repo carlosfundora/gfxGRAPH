@@ -141,8 +141,7 @@ impl ConditionalGraphRunner {
             }
         }
 
-        let time_mod = py.import("time")?;
-        let t0: f64 = time_mod.call_method0("perf_counter")?.extract()?;
+        let start = std::time::Instant::now();
 
         let graphs_dict = self.graphs.downcast_bound::<PyDict>(py)
             .map_err(|_| PyRuntimeError::new_err("Invalid state: graphs must be a dict"))?;
@@ -164,7 +163,7 @@ impl ConditionalGraphRunner {
             }
         }
 
-        let us = (time_mod.call_method0("perf_counter")?.extract::<f64>()? - t0) * 1e6;
+        let us = start.elapsed().as_secs_f64() * 1_000_000.0;
 
         if let Ok(enable_mod) = py.import("gfxgraph._enable") {
             let _ = enable_mod.call_method1("record_replay_us", (us,));
