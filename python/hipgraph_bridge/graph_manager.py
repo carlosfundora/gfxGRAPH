@@ -22,7 +22,18 @@ from hipgraph_bridge.capture_safety import (
     torch_cuda_execution_usable,
     unsafe_torch_graph_capture_enabled,
 )
+from hipgraph_bridge.guard import (
+    apply_deep_guard_env,
+    guard_level,
+    is_illegal_access,
+    localize_fault,
+    make_safe,
+)
 from hipgraph_bridge.shape_bucketing import ShapeBucketPool
+
+# GUARD tier 3 (deep): land OOB faults at real allocation boundaries.
+if guard_level() >= 3:
+    apply_deep_guard_env()
 
 try:
     from gfxgraph._enable import bump as _bump
@@ -304,6 +315,10 @@ class BridgedCUDAGraph:
         # Input validation
         if input_tensor is not None:
             _validate_tensor(input_tensor, "input_tensor")
+            # GUARD tier 1: auto-correct capture-unsafe inputs (non-contiguous /
+            # broadcast / negative-stride) into stable contiguous buffers.
+            if guard_level() >= 1:
+                input_tensor, _converted = make_safe(input_tensor, "input_tensor")
 
         # Eager fallback path
         if self._eager_fallback:
@@ -339,6 +354,18 @@ class BridgedCUDAGraph:
             try:
                 self._graph.replay()
             except Exception as e:
+                # GUARD tier 2: turn an opaque illegal-access into a precise,
+                # localized report (op + tensor layouts) before falling back.
+                if guard_level() >= 2 and is_illegal_access(e):
+                    fault = localize_fault(
+                        e,
+                        op="BridgedCUDAGraph.replay/graph.replay",
+                        tensors=[
+                            ("input_tensor", input_tensor),
+                            ("static_output", self._static_output),
+                        ],
+                    )
+                    _log.error("%s", fault)
                 _log.warning("Graph replay failed: %s — falling back to eager", e)
                 self._eager_fallback = True
                 _bump_fallback()
@@ -379,9 +406,21 @@ class BridgedCUDAGraph:
                 "Cannot run eager fallback because CUDA/HIP execution is not usable: "
                 f"{torch_cuda_execution_error()}"
             )
-        if input_tensor is not None:
-            return self._model_fn(input_tensor)
-        return self._model_fn()
+        try:
+            if input_tensor is not None:
+                return self._model_fn(input_tensor)
+            return self._model_fn()
+        except Exception as e:
+            # GUARD tier 2: if even the eager fallback hits an illegal access, the
+            # bug is in the model forward itself (in-kernel OOB / logic bug), not the
+            # graph. Surface a precise, localized fault instead of an opaque error.
+            if guard_level() >= 2 and is_illegal_access(e):
+                raise localize_fault(
+                    e,
+                    op="BridgedCUDAGraph._run_eager/model_fn",
+                    tensors=[("input_tensor", input_tensor)],
+                ) from e
+            raise
 
     def _run_preferred_eager(self, input_tensor=None):
         """Execute eager path selected by adaptive policy (non-fallback)."""

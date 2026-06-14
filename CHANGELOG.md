@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.4.0] - 2026-06-14
+
+### Added
+- **GUARD — 3-tier illegal-memory-access safety** (`hipgraph_bridge.guard`, exported from
+  `gfxgraph`; activate with `GFXGRAPH_GUARD=1|2|3`, default off → zero overhead). For ROCm users
+  unfamiliar with CUDA-graph rules:
+  - **Tier 1 — auto-safe-capture**: `make_safe()` / `make_capture_safe()` force tensors entering
+    capture/replay to be contiguous and own their storage (fixes non-contiguous, broadcast/0-stride,
+    negative-stride views); `validate_layout()` reports issues. Auto-corrects the entire
+    *capture-safety* fault family (accesses that fail only because a captured buffer was strided or
+    its address wasn't stable). Wired into `BridgedCUDAGraph.replay()` input handling.
+  - **Tier 2 — fault localization**: a hard `hipErrorIllegalAddress` (would-be SIGSEGV) becomes a
+    precise, catchable `GfxGraphFault` carrying the op + every involved tensor's layout, then a
+    graceful eager fallback. Wired into the graph-replay and eager-fallback paths so an in-kernel OOB
+    (a producing-code logic bug) is *diagnosable* instead of crashing the process.
+  - **Tier 3 — deep guard (opt-in)**: `RedZone` sentinel-padded buffers detect OOB writes past
+    gfxGRAPH-owned buffers; `apply_deep_guard_env()` disables the caching allocator so faults land at
+    real allocation boundaries; `compute_sanitizer_cmd()` wraps a command in compute-sanitizer /
+    rocm-memcheck to pin the exact offending op.
+  - 31 CPU-runnable unit tests (`tests/test_guard.py`).
+
 ## [Unreleased]
 
 ### Fixed

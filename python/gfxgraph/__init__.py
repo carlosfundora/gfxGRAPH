@@ -12,7 +12,7 @@ Activation:
     # GFXGRAPH=validate python my_script.py
 """
 
-__version__ = "0.3.4"
+__version__ = "0.4.0"
 
 import os as _os
 import logging as _logging
@@ -31,6 +31,20 @@ from hipgraph_bridge.conditional import ConditionalGraph
 # Enable/disable machinery
 from gfxgraph._enable import enable, disable, is_enabled, stats, health_check
 
+# GUARD — 3-tier illegal-memory-access safety (GFXGRAPH_GUARD=1|2|3)
+from hipgraph_bridge.guard import (
+    GfxGraphFault,
+    RedZone,
+    apply_deep_guard_env,
+    compute_sanitizer_cmd,
+    guard_level,
+    is_illegal_access,
+    localize_fault,
+    make_capture_safe,
+    make_safe,
+    validate_layout,
+)
+
 __all__ = [
     "enable",
     "disable",
@@ -40,6 +54,17 @@ __all__ = [
     "BridgedCUDAGraph",
     "ShapeBucketPool",
     "ConditionalGraph",
+    # GUARD
+    "guard_level",
+    "validate_layout",
+    "make_safe",
+    "make_capture_safe",
+    "GfxGraphFault",
+    "is_illegal_access",
+    "localize_fault",
+    "RedZone",
+    "apply_deep_guard_env",
+    "compute_sanitizer_cmd",
 ]
 
 # Auto-enable via environment variable

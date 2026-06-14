@@ -2,16 +2,32 @@
   <img src="docs/assets/gfxgraph-logo.png" alt="gfxGRAPH logo" width="600" />
 </p>
 
-# gfxGRAPH v0.3.4
+# gfxGRAPH v0.4.0
 
-Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2), featuring DeepSpeed-HIP inference kernels, safe eager fallback, dynamic-shape bucketing, and pure-Rust architectural contracts.
+Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2), featuring DeepSpeed-HIP inference kernels, safe eager fallback, dynamic-shape bucketing, **3-tier illegal-memory-access GUARD**, and pure-Rust architectural contracts.
 
 ## At a Glance
 
 - **Tier 1**: pure-Python integration with monkey-patched `torch.cuda.CUDAGraph`
 - **Tier 2**: native bridge for conditional nodes, rapid launch, and nested capture gaps
+- **GUARD**: opt-in 3-tier illegal-memory-access safety (`GFXGRAPH_GUARD=1|2|3`) — see below
 - **Target**: AMD Radeon RX 6700 XT / 6800 / 6900 class GPUs on ROCm
 - **Focus**: transparent integration, safe fallback behavior, and practical performance on RDNA2
+
+## GUARD — illegal-memory-access safety (`GFXGRAPH_GUARD`)
+
+Most "illegal memory access" crashes on ROCm come from CUDA-graph rules ROCm users don't expect.
+GUARD (off by default; set `GFXGRAPH_GUARD=1|2|3`) addresses them in three escalating tiers:
+
+| Tier | `GFXGRAPH_GUARD` | What it does |
+|---|---|---|
+| 1 — auto-safe-capture | `1` / `tier1` / `safe` | Force tensors entering capture/replay to be **contiguous and own their storage** (fixes non-contiguous / broadcast-0-stride / negative-stride views). Auto-corrects the whole *capture-safety* fault family. |
+| 2 — fault localization | `2` / `tier2` / `localize` | Turn a would-be SIGSEGV (`hipErrorIllegalAddress`) into a precise, catchable `GfxGraphFault` (op + every tensor's layout) + graceful eager fallback. Makes *in-kernel* OOB (a producing-code logic bug — not auto-fixable) **diagnosable** instead of fatal. |
+| 3 — deep guard (opt-in, slow) | `3` / `tier3` / `deep` | `RedZone` sentinel buffers catch OOB writes past gfxGRAPH-owned buffers; disables the caching allocator so faults land at real boundaries; `compute_sanitizer_cmd()` wraps a run in compute-sanitizer / rocm-memcheck to pin the exact op. |
+
+Higher tiers include the lower ones. Programmatic API: `gfxgraph.make_safe`, `make_capture_safe`,
+`validate_layout`, `GfxGraphFault`, `localize_fault`, `RedZone`, `compute_sanitizer_cmd`,
+`guard_level`.
 
 ## Table of Contents
 
