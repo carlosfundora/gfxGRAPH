@@ -44,6 +44,16 @@ from hipgraph_bridge.guard import (
     make_safe,
     validate_layout,
 )
+from hipgraph_bridge.diagnostics import (
+    Diagnosis,
+    diagnose,
+    environment_report,
+    explain,
+    install_diagnostics,
+    lang as diag_lang,
+    report,
+)
+from hipgraph_bridge.wavefront import detect_wave64, plan_software_wave
 
 __all__ = [
     "enable",
@@ -65,6 +75,17 @@ __all__ = [
     "RedZone",
     "apply_deep_guard_env",
     "compute_sanitizer_cmd",
+    # Diagnostics (always-on HIP/ROCm error & status reporting; bilingual en/zh)
+    "explain",
+    "report",
+    "diagnose",
+    "install_diagnostics",
+    "environment_report",
+    "Diagnosis",
+    "diag_lang",
+    # Wavefront (capture wave64/128 + plan the software-wave conversion)
+    "detect_wave64",
+    "plan_software_wave",
 ]
 
 # Auto-enable via environment variable
@@ -76,3 +97,11 @@ elif _env == "debug":
     enable(debug=True)
 elif _env == "validate":
     enable(validate=True)
+
+# Always-on HIP/ROCm error reporting: auto-install the diagnostics excepthook when gfxGRAPH is
+# enabled, or when GFXGRAPH_DIAG is explicitly requested. Honors GFXGRAPH_LANG (en|zh).
+if _env in ("1", "debug", "validate") or _os.environ.get("GFXGRAPH_DIAG", "").lower() in ("1", "on", "true"):
+    try:
+        install_diagnostics()
+    except Exception:  # pragma: no cover - never let diagnostics break import
+        pass

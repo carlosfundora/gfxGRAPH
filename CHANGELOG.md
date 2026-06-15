@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.0] - 2026-06-15
+
+### Added
+- **Diagnostics — always-on, bilingual (English / 中文) HIP/ROCm error & status reporting**
+  (`hipgraph_bridge.diagnostics`, exported from `gfxgraph`). Translates terse ROCm errors into
+  **cause + gfx1030/RDNA2 context + concrete fix** for confused ROCm users. Works whether or not
+  CUDA-graphs are active (fills the gap where GUARD — graph-path only — stayed silent).
+  - `explain(err)`, `report(err, context=...)`, `diagnose(context)` context manager,
+    `install_diagnostics()` (always-on `sys.excepthook`; auto-installed when `GFXGRAPH=1` or
+    `GFXGRAPH_DIAG=1`), and `environment_report()` (HSA override / arch / free VRAM / graph state).
+  - 8 diagnoses grounded in real gfx1030 failures: `no_kernel_image` (AOTriton/FA3 no gfx1030
+    image), `out_of_memory` (rq3/tq3 codec OOM at high mem-fraction), `illegal_address` (CUDA-graph
+    stale buffer), `bf16_unsupported`, `wrong_arch`, `wave64_ignored`, `aiter_on_rdna`,
+    `invalid_configuration`.
+  - **Chinese (中文) toggle** via `GFXGRAPH_LANG=zh`; translations live in a **separate** lazily-
+    loaded `hipgraph_bridge/diag_zh.py` so the English module stays clean (zero cost for en users).
+- **Wavefront — capture wave64/128 + plan the software-wave conversion** (`hipgraph_bridge.wavefront`):
+  `detect_wave64()` captures 64/128-lane intent (compile flags / `warpSize==64` / log lines);
+  `plan_software_wave(rows, 64|128)` returns the gang-W-Wave32 + LDS-merge launch plan (W=2 ≈ wave64,
+  W=4 ≈ wave128), adaptive to grid occupancy. NB: this is detection + a conversion *plan*, not a
+  runtime kernel rewrite (ROCm fixes wavefront size at compile time).
+- Chinese user guide: `docs/GUIDE_zh.md`.
+- Publisher headers (Carlos Fundora · @carlosfundora) across new source files.
+
+### Changed
+- Packaging readied for PyPI (`uv pip install gfxgraph`): keywords, GPU + Chinese classifiers,
+  description updated. Pure-Python; native bridge remains the optional `gfxgraph-native` companion.
+
 ## [0.4.0] - 2026-06-14
 
 ### Added

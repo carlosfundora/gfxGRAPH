@@ -4,21 +4,27 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gfxgraph"
-version = "0.4.0"
-description = "Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2), featuring DeepSpeed-HIP inference kernels, safe eager fallback, dynamic-shape bucketing, and pure-Rust architectural contracts."
+version = "0.5.0"
+description = "Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2): safe eager fallback, dynamic-shape bucketing, illegal-access GUARD, and always-on bilingual (English/中文) HIP/ROCm error & status diagnostics."
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "MIT"}
 authors = [{name = "Carlos Fundora"}]
+maintainers = [{name = "Carlos Fundora"}]
+keywords = ["rocm", "hip", "amd", "gfx1030", "rdna2", "cuda-graph", "pytorch", "diagnostics", "flash-attention"]
 dependencies = ["torch>=2.9"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
+    "Environment :: GPU",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
+    "Natural Language :: English",
+    "Natural Language :: Chinese (Simplified)",
     "Topic :: Software Development :: Libraries",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: System :: Distributed Computing",
 ]
 
