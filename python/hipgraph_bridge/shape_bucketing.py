@@ -73,6 +73,15 @@ class ShapeBucketPool:
         buckets: Optional[List[int]] = None,
         warmup: bool = False,
     ):
+        """Build a dynamic-shape bucket pool — one captured graph per bucket size, selected at
+        call time by rounding the input up to the nearest bucket.
+
+        Args:
+            model_fn: callable run to capture each bucket's graph (and for eager fallback).
+            buckets: sorted bucket sizes (default ``[1,2,4,8,16,32,64]``); inputs round up to one.
+            warmup: if True, capture all buckets eagerly up front instead of lazily on first use.
+        Uses the Rust ``BucketRouter`` for O(1) bucket selection when available, else a Python set.
+        """
         if model_fn is not None and not callable(model_fn):
             raise TypeError("model_fn must be callable")
 

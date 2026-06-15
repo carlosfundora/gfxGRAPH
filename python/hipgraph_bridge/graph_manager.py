@@ -117,6 +117,10 @@ class BridgedCUDAGraph:
     """
 
     def __init__(self):
+        """Create an inactive bridged graph. Configure + capture via `capture(...)`, then
+        `replay(...)`. All state (the underlying HIP graph, shape-bucket pool, conditional
+        branches, stream, static output, eager-fallback model fn) is initialized empty and
+        populated during `capture`; nothing touches the GPU until then."""
         self._graph = None
         self._capture_ctx = None
         self._shape_pool = None
