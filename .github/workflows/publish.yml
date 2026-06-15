@@ -1,0 +1,30 @@
+# gfxGRAPH — PyPI publish via Trusted Publishing (OIDC, no API token)
+# Publisher: Carlos Fundora · GitHub: @carlosfundora · Hugging Face: @carlosfundora
+# SPDX-License-Identifier: MIT
+#
+# Publishes to PyPI automatically when you create a GitHub Release (or run manually).
+# One-time PyPI setup (Trusted Publisher) — see docs/PUBLISHING.md. No secrets stored.
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}        # allow manual runs from the Actions tab
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    environment: pypi          # must match the env name in the PyPI Trusted Publisher config
+    permissions:
+      id-token: write          # REQUIRED: OIDC token for Trusted Publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist + wheel (pure-Python)
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
