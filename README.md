@@ -2,7 +2,7 @@
   <img src="docs/assets/gfxgraph-logo.png" alt="gfxGRAPH logo" width="600" />
 </p>
 
-# gfxGRAPH v0.5.0
+# gfxGRAPH v1.0.0
 
 Drop-in **CUDA Graph → HIP Graph** translation layer for AMD **gfx1030/1031 (RDNA2)** — safe eager
 fallback, dynamic-shape bucketing, a 3-tier illegal-memory-access **GUARD**, **adaptive

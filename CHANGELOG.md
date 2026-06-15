@@ -2,7 +2,9 @@
 
 All notable changes to this project are documented in this file.
 
-## [0.5.0] - 2026-06-15
+## [1.0.0] - 2026-06-15
+
+First stable release (promoted from the 0.5.x line; never separately published). Production/Stable.
 
 ### Added
 - **Adaptive hardware + ROCm-PyTorch detection** (`hipgraph_bridge.hardware`, exported from

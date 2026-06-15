@@ -23,8 +23,8 @@ already in this repo (`.github/workflows/publish.yml`); you just register the pu
    | Repository name | `gfxGRAPH` |
    | Workflow name | `publish.yml` |
    | Environment name | `pypi` |
-4. **Publish:** in the GitHub repo → Releases → "Draft a new release" → tag `v0.5.0`, title
-   `gfxGRAPH 0.5.0`, Publish. The Actions workflow builds + uploads automatically. Done →
+4. **Publish:** in the GitHub repo → Releases → "Draft a new release" → tag `v1.0.0`, title
+   `gfxGRAPH 1.0.0`, Publish. The Actions workflow builds + uploads automatically. Done →
    `uv pip install gfxgraph`.
 
 (After the first release the "pending" publisher becomes a normal one; future releases just need a
@@ -41,7 +41,7 @@ new tag.)
 3. **Upload** (artifacts are already built in `dist/`):
    ```bash
    cd ~/ai/projects/gfxGRAPH
-   uv publish --token <PASTE_TOKEN> dist/gfxgraph-0.5.0*
+   uv publish --token <PASTE_TOKEN> dist/gfxgraph-1.0.0*
    ```
    Keep the token secret — run this in your own terminal; don't paste it into chat/commits.
 4. **After it works:** create a new **project-scoped** token (`gfxgraph` only) and delete the
@@ -49,5 +49,5 @@ new tag.)
 
 **Practice first (optional):** TestPyPI is a separate sandbox (own account/token):
 ```bash
-uv publish --publish-url https://test.pypi.org/legacy/ --token <TEST_TOKEN> dist/gfxgraph-0.5.0*
+uv publish --publish-url https://test.pypi.org/legacy/ --token <TEST_TOKEN> dist/gfxgraph-1.0.0*
 ```
