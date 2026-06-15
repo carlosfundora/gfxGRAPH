@@ -2,17 +2,32 @@
   <img src="docs/assets/gfxgraph-logo.png" alt="gfxGRAPH logo" width="600" />
 </p>
 
-# gfxGRAPH v0.4.0
+# gfxGRAPH v0.5.0
 
-Drop-in CUDA Graph → HIP Graph translation layer for AMD gfx1030/1031 (RDNA2), featuring DeepSpeed-HIP inference kernels, safe eager fallback, dynamic-shape bucketing, **3-tier illegal-memory-access GUARD**, and pure-Rust architectural contracts.
+Drop-in **CUDA Graph → HIP Graph** translation layer for AMD **gfx1030/1031 (RDNA2)** — safe eager
+fallback, dynamic-shape bucketing, a 3-tier illegal-memory-access **GUARD**, **adaptive
+hardware/ROCm-PyTorch detection**, and **always-on bilingual (English / 中文) HIP/ROCm diagnostics**.
+One `pip install`; it auto-detects your GPU + ROCm-PyTorch and applies only what's relevant.
+
+> Install: `uv pip install gfxgraph` · Quick check: `gfxgraph doctor` · Explain any ROCm error
+> (from *any* engine): `your-engine 2>&1 | gfxgraph explain`
 
 ## At a Glance
 
-- **Tier 1**: pure-Python integration with monkey-patched `torch.cuda.CUDAGraph`
-- **Tier 2**: native bridge for conditional nodes, rapid launch, and nested capture gaps
-- **GUARD**: opt-in 3-tier illegal-memory-access safety (`GFXGRAPH_GUARD=1|2|3`) — see below
-- **Target**: AMD Radeon RX 6700 XT / 6800 / 6900 class GPUs on ROCm
-- **Focus**: transparent integration, safe fallback behavior, and practical performance on RDNA2
+- **One dynamic install** — auto-detects GPU arch, ROCm-PyTorch, and the optional native bridge, and
+  applies only what's present. No manual "tier" installs.
+- **Adaptive** — reads the GPU on boot (or honors `GFXGRAPH_ARCH=<gfxNNNN>`), **reports the
+  ROCm-PyTorch it finds**, and **errors clearly if PyTorch isn't a ROCm build** (the common CPU/CUDA-
+  wheel trap) — but only when *activating the bridge*; diagnostics stay usable without torch.
+- **Bilingual diagnostics** — terse HIP/ROCm errors → cause + arch context + fix; `GFXGRAPH_LANG=zh`
+  for 中文; usable from **any** engine via `gfxgraph explain` (pipe its stderr).
+- **GUARD** — opt-in 3-tier illegal-memory-access safety (`GFXGRAPH_GUARD=1|2|3`) — see below.
+- **Collision-safe wave64/128** — captures wave64/128 intent + plans the software-wave conversion,
+  **only when your code isn't already doing it** (skips if the launch already gangs warps / the grid
+  is saturated / you opt out).
+- **Cross-engine** — full bridge for PyTorch engines (vLLM, sglang); diagnostics for **any** engine
+  (llama.cpp, candle) via the CLI; native hipGraph interposer + MIGraphX backend on the roadmap.
+- **Target**: AMD RX 6700 XT / 6800 / 6900 (RDNA2) on ROCm; adapts to other archs.
 
 ## GUARD — illegal-memory-access safety (`GFXGRAPH_GUARD`)
 
@@ -28,6 +43,82 @@ GUARD (off by default; set `GFXGRAPH_GUARD=1|2|3`) addresses them in three escal
 Higher tiers include the lower ones. Programmatic API: `gfxgraph.make_safe`, `make_capture_safe`,
 `validate_layout`, `GfxGraphFault`, `localize_fault`, `RedZone`, `compute_sanitizer_cmd`,
 `guard_level`.
+
+## Diagnostics — bilingual HIP/ROCm error reporting (`gfxgraph.diagnostics`)
+
+ROCm errors are terse ("No available kernel. Aborting execution."). gfxGRAPH translates them into
+**cause + your-GPU context + a concrete fix** — and works whether or not CUDA-graphs are active
+(GUARD only covers the graph path). Covers `no_kernel_image`, `out_of_memory`, `illegal_address`,
+`bf16_unsupported`, `wrong_arch`, `wave64_ignored`, `aiter_on_rdna`, `invalid_configuration`.
+
+```python
+import gfxgraph
+gfxgraph.install_diagnostics()           # always-on: cryptic HIP errors → explained (auto when GFXGRAPH=1)
+print(gfxgraph.explain("No available kernel").format())
+with gfxgraph.diagnose("decode"):        # wrap a risky block
+    model.generate(...)
+```
+**中文:** `export GFXGRAPH_LANG=zh` switches all diagnostics to Chinese (translations live in a
+separate lazily-loaded `diag_zh.py`; English users pay zero cost). See [docs/GUIDE_zh.md](docs/GUIDE_zh.md).
+
+## Adaptive behavior
+
+- **Reads your GPU on boot** (arch / name / CU / wavefront / VRAM) and adapts diagnostics + wave
+  planning to it. Override with `GFXGRAPH_ARCH=<gfxNNNN>` to target a specific card.
+- **Reports the ROCm-PyTorch it finds** (`torch X · HIP Y`) and **errors clearly if PyTorch is not a
+  ROCm build** (`torch.version.hip is None` — a CPU/CUDA wheel). Fires when *activating the bridge*,
+  not at import (diagnostics/wavefront stay torch-free for CI/dev boxes).
+- **Collision-safe wave conversion** (`GFXGRAPH_WAVE=off|detect|auto`, default `detect`): gfxGRAPH
+  **does not** apply software-wave64/128 when your code already handles it — it skips if the launch
+  already gangs warps (`block > wavefront`), the grid already saturates the GPU, or you set
+  `GFXGRAPH_NO_WAVE=1`. (gfx1030 is Wave32-only; ROCm drops `-mwavefrontsize64`. "Conversion" =
+  gang W Wave32 warps + LDS merge — a *plan/helper*, not a runtime kernel rewrite.)
+
+```python
+gfxgraph.device_info()        # DeviceInfo(arch, name, cu, wavefront, vram…)
+gfxgraph.torch_rocm_status()  # {is_rocm, torch_version, hip_version, message}
+gfxgraph.should_convert(block_threads, grid_blocks)  # (apply, reason) — collision-safe gate
+```
+
+## CLI (`gfxgraph …`)
+
+The diagnostics are framework-agnostic, so the CLI helps users of **any** engine:
+
+```bash
+gfxgraph doctor                         # full env report: GPU, ROCm-PyTorch, accelerators, engines
+gfxgraph device                         # detected/overridden GPU summary
+gfxgraph explain "hipErrorOutOfMemory"  # explain an error (arg) …
+llama-cli … 2>&1 | gfxgraph explain     # … or pipe any engine's stderr (llama.cpp/candle/vLLM)
+gfxgraph run train.py                   # run a script with the CUDA→HIP bridge enabled
+```
+
+## Cross-engine support
+
+| Engine | gfxGRAPH support |
+|---|---|
+| **PyTorch engines** (vLLM, sglang, TGI) | **Full** CUDA-graph bridge + GUARD + diagnostics (via the `torch.cuda.CUDAGraph` patch). |
+| **llama.cpp**, **candle** | **Diagnostics now** via `gfxgraph explain` (pipe stderr). GUARD/bridge for their *native* graphs = **roadmap** via the **hipGraph interposer** (`LD_PRELOAD` over `hipGraph*`). |
+| **Any engine / language** | The `gfxgraph explain` CLI works universally. |
+
+> Note: **hipGraph** here means the **HIP runtime graph API** (the CUDA-Graphs equivalent gfxGRAPH is
+> built on) — *not* the ROCm-DS `hipGRAPH` graph-*analytics* library (unrelated). **MIGraphX**
+> (detected via `gfxgraph.migraphx_available()`) is a potential ONNX/IR compile backend — roadmap;
+> use AMD's ONNX-Runtime MIGraphX EP today.
+
+## Environment variables (reference)
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `GFXGRAPH` | off | `1` enable bridge · `debug` · `validate` (auto-installs diagnostics when set) |
+| `GFXGRAPH_GUARD` | `0` | illegal-access safety tier: `0\|1\|2\|3` (`safe`/`localize`/`deep`) |
+| `GFXGRAPH_DIAG` | `1` | diagnostics output; `0` to silence |
+| `GFXGRAPH_LANG` | `en` | diagnostics language; `zh` for 中文 |
+| `GFXGRAPH_ARCH` | (detected) | override the target GPU arch, e.g. `gfx1100` |
+| `GFXGRAPH_WAVE` | `detect` | wave64/128 conversion: `off` · `detect` (warn) · `auto` |
+| `GFXGRAPH_NO_WAVE` | unset | hard opt-out of wave conversion (collision avoidance) |
+| `GFXGRAPH_REPLAY_MODE` | `standard` | graph replay strategy: `standard\|adaptive\|hot` |
+| `GFXGRAPH_VRAM_CAP` | `0.80` | VRAM fraction for graph-capture scratch |
+| `HSA_OVERRIDE_GFX_VERSION` | — | run gfx1031 as `10.3.0` (gfx1030); set on RX 6700 XT |
 
 ## Table of Contents
 
@@ -432,4 +523,14 @@ Interpretation:
 
 ## License
 
-MIT
+**MIT** — free for any use (commercial included), modification, and redistribution; no copyleft, no
+runtime royalties. The only runtime dependency is **PyTorch** (BSD-3-Clause, also permissive), so the
+full stack stays permissively licensed. See [LICENSE](LICENSE).
+
+© 2026 **Carlos Fundora** — GitHub [@carlosfundora](https://github.com/carlosfundora) ·
+Hugging Face [@carlosfundora](https://huggingface.co/carlosfundora).
+
+## Documentation
+- [docs/GUIDE_zh.md](docs/GUIDE_zh.md) — 中文使用指南 (Chinese guide)
+- [docs/PUBLISHING.md](docs/PUBLISHING.md) — releasing to PyPI (Trusted Publishing, first-timer friendly)
+- [CHANGELOG.md](CHANGELOG.md)

@@ -30,9 +30,36 @@ from dataclasses import dataclass
 
 _log = logging.getLogger("gfxgraph")
 
-# gfx1030 / RX 6700 XT facts referenced by several entries (single source of truth).
-_GFX1030 = "gfx1030 (RDNA2, Wave32, no matrix/MFMA cores; this box runs gfx1031 as gfx1030)"
+# Arch descriptor is a TOKEN here so messages adapt to the detected/overridden GPU
+# (GFXGRAPH_ARCH) at format() time, instead of being hardcoded to gfx1030. The token is
+# substituted in `Diagnosis.format()` via `_arch_text()` → hardware.arch_descriptor().
+_ARCH_TOKEN = "«arch»"
+_GFX1030 = _ARCH_TOKEN
 _HSA = "HSA_OVERRIDE_GFX_VERSION=10.3.0"
+
+
+_GFX1030_EN = "gfx1030 (RDNA2, Wave32, no matrix/MFMA cores; this box runs gfx1031 as gfx1030)"
+_GFX1030_ZH = "gfx1030（RDNA2，仅 Wave32，无矩阵/MFMA 核心；本机以 gfx1030 方式运行 gfx1031）"
+
+
+def _arch_text(lang_: str = "en") -> str:
+    """Architecture descriptor for the active/overridden GPU, in `lang_` (gfx1030 default if
+    unknown). English defers to hardware.arch_descriptor(); Chinese is built locally."""
+    try:
+        from .hardware import device_info
+        d = device_info()
+    except Exception:
+        d = None
+    if lang_ == "zh":
+        if d is None or d.is_gfx1030:
+            return _GFX1030_ZH
+        kind = "RDNA（Wave32，无矩阵核）" if d.is_rdna else "CDNA（Wave64，有矩阵核）"
+        return f"{d.arch} — {kind}，{d.cu} CU（{d.name}）"
+    try:
+        from .hardware import arch_descriptor
+        return arch_descriptor()
+    except Exception:
+        return _GFX1030_EN
 
 
 def lang() -> str:
@@ -91,6 +118,8 @@ class Diagnosis:
         lg = lang_ or lang()
         L = _labels(lg)
         t = self.localized(lg)
+        arch = _arch_text(lg)  # adapt the arch descriptor to the detected/overridden GPU
+        t = {k: (v.replace(_ARCH_TOKEN, arch) if isinstance(v, str) else v) for k, v in t.items()}
         return (
             f"\n┌─ {L['diag']} [{self.severity.upper()}: {self.code}]\n"
             f"│ {t['summary']}\n"
@@ -291,25 +320,28 @@ def install_diagnostics() -> bool:
 
 
 def environment_report() -> str:
-    """Human-readable snapshot for confused ROCm users: arch override, torch/HIP, free VRAM,
-    and gfxGRAPH/GUARD state. Degrades gracefully when torch/rocm-smi are absent."""
+    """Human-readable snapshot for confused ROCm users — the unified 'what gfxGRAPH found':
+    detected/overridden GPU, the ROCm-PyTorch (or a clear note if it's a CPU/CUDA wheel),
+    available accelerators (MIGraphX/AITER/Triton/native bridge), detected engines, and
+    gfxGRAPH/GUARD/DIAG/WAVE config. Degrades gracefully without torch."""
     lines = ["gfxGRAPH environment report:"]
     lines.append(f"  HSA_OVERRIDE_GFX_VERSION = {os.environ.get('HSA_OVERRIDE_GFX_VERSION', '(unset!)')}")
     lines.append(f"  PYTORCH_ROCM_ARCH        = {os.environ.get('PYTORCH_ROCM_ARCH', '(unset)')}")
-    lines.append(f"  GFXGRAPH / GUARD / DIAG  = {os.environ.get('GFXGRAPH','0')} / "
-                 f"{os.environ.get('GFXGRAPH_GUARD','0')} / {os.environ.get('GFXGRAPH_DIAG','1')}")
+    lines.append(f"  GFXGRAPH/GUARD/DIAG/WAVE  = {os.environ.get('GFXGRAPH','0')} / "
+                 f"{os.environ.get('GFXGRAPH_GUARD','0')} / {os.environ.get('GFXGRAPH_DIAG','1')} / "
+                 f"{os.environ.get('GFXGRAPH_WAVE','detect')}")
     try:
-        import torch
-        hip = getattr(torch.version, "hip", None)
-        lines.append(f"  torch                    = {torch.__version__} (hip={hip})")
-        if torch.cuda.is_available():
-            free, total = torch.cuda.mem_get_info()
-            lines.append(f"  device                   = {torch.cuda.get_device_name(0)}")
-            lines.append(f"  VRAM free/total          = {free/2**30:.2f} / {total/2**30:.2f} GiB")
-        else:
-            lines.append("  device                   = (torch.cuda not available — CPU/no-ROCm)")
+        from .hardware import device_info, torch_rocm_status, detect_accelerators, detect_engines
+        st = torch_rocm_status()
+        lines.append(f"  PyTorch                  = {st['message']}")
+        dev = device_info()
+        lines.append(f"  GPU                      = {dev.summary() if dev else '(no device detected)'}")
+        acc = ", ".join(k for k, v in detect_accelerators().items() if v) or "(none)"
+        lines.append(f"  accelerators             = {acc}")
+        eng = ", ".join(k for k, v in detect_engines().items() if v) or "(none detected)"
+        lines.append(f"  engines                  = {eng}")
     except Exception as e:  # pragma: no cover
-        lines.append(f"  torch                    = (not importable: {e})")
-    if os.environ.get("HSA_OVERRIDE_GFX_VERSION") != "10.3.0":
+        lines.append(f"  (hardware probe failed: {e})")
+    if os.environ.get("HSA_OVERRIDE_GFX_VERSION") not in ("10.3.0",) and "gfx1030" in arch_descriptor():
         lines.append("  ⚠ gfx1030 boxes usually need HSA_OVERRIDE_GFX_VERSION=10.3.0")
     return "\n".join(lines)

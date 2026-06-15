@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 ## [0.5.0] - 2026-06-15
 
 ### Added
+- **Adaptive hardware + ROCm-PyTorch detection** (`hipgraph_bridge.hardware`, exported from
+  `gfxgraph`): `device_info()` reads the GPU on boot (arch/name/CU/wavefront/VRAM); `GFXGRAPH_ARCH`
+  overrides the target card. `require_rocm_torch()` (called at `enable()`) **reports the ROCm-PyTorch
+  found** (`torch X · HIP Y`) and **raises a precise error if PyTorch is missing or a CPU/CUDA wheel**
+  (`torch.version.hip is None`) — fired at bridge activation, so diagnostics/wavefront stay torch-free.
+  `detect_accelerators()` / `detect_engines()` discover MIGraphX/AITER/Triton/native-bridge + engines.
+  Diagnostics + wavefront now **adapt to the detected/overridden arch** (no longer hardcoded gfx1030).
+- **Collision-safe wave conversion**: `GFXGRAPH_WAVE=off|detect|auto` + `wavefront.should_convert()`
+  — gfxGRAPH only plans software-wave64/128 when the user's code isn't already doing it (skips when
+  the launch gangs warps / the grid is saturated / `GFXGRAPH_NO_WAVE=1`). `plan_software_wave` now
+  defaults lanes/CU from the detected device.
+- **Universal CLI** (`python -m gfxgraph` / `gfxgraph`): `explain` (arg or piped stderr — works for
+  ANY engine: llama.cpp/candle/vLLM), `doctor`/`env`, `device`, `run`.
+- **Cross-engine interop scaffold** (`hipgraph_bridge.interop`): `migraphx_available()`,
+  `cross_engine_support()`, `hipgraph_interposer_status()`, and a clearly-experimental
+  `MIGraphXBackend` stub (raises until routing lands) — the framework-agnostic hipGraph-interposer +
+  MIGraphX backend are the documented roadmap; diagnostics are universal today via the CLI.
 - **Diagnostics — always-on, bilingual (English / 中文) HIP/ROCm error & status reporting**
   (`hipgraph_bridge.diagnostics`, exported from `gfxgraph`). Translates terse ROCm errors into
   **cause + gfx1030/RDNA2 context + concrete fix** for confused ROCm users. Works whether or not

@@ -16,8 +16,9 @@ LABELS = {
     "fix": "解决方法", "silence": "设置 GFXGRAPH_DIAG=0 可静音",
 }
 
-# Chinese hardware descriptors (zh-native, so zh output isn't mixed-language).
-_GFX = "gfx1030（RDNA2，仅 Wave32，无矩阵/MFMA 核心；本机以 gfx1030 方式运行 gfx1031）"
+# Arch descriptor is a token («arch») substituted at format() time so zh output adapts to the
+# detected/overridden GPU (GFXGRAPH_ARCH), same mechanism as the English table. _HSA is literal.
+_GFX = "«arch»"
 _HSA = "HSA_OVERRIDE_GFX_VERSION=10.3.0"
 
 # Per-code messages — same canonical codes as diagnostics._TABLE.

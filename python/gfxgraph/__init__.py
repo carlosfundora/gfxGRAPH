@@ -53,7 +53,22 @@ from hipgraph_bridge.diagnostics import (
     lang as diag_lang,
     report,
 )
-from hipgraph_bridge.wavefront import detect_wave64, plan_software_wave
+from hipgraph_bridge.wavefront import detect_wave64, plan_software_wave, should_convert, wave_mode
+from hipgraph_bridge.hardware import (
+    DeviceInfo,
+    RocmTorchError,
+    detect_accelerators,
+    detect_engines,
+    device_info,
+    require_rocm_torch,
+    torch_rocm_status,
+)
+from hipgraph_bridge.interop import (
+    MIGraphXBackend,
+    cross_engine_support,
+    hipgraph_interposer_status,
+    migraphx_available,
+)
 
 __all__ = [
     "enable",
@@ -83,9 +98,24 @@ __all__ = [
     "environment_report",
     "Diagnosis",
     "diag_lang",
-    # Wavefront (capture wave64/128 + plan the software-wave conversion)
+    # Wavefront (capture wave64/128 + plan + collision-safe gate)
     "detect_wave64",
     "plan_software_wave",
+    "should_convert",
+    "wave_mode",
+    # Hardware (boot-time device + ROCm-PyTorch detection; user-card override)
+    "device_info",
+    "DeviceInfo",
+    "torch_rocm_status",
+    "require_rocm_torch",
+    "RocmTorchError",
+    "detect_accelerators",
+    "detect_engines",
+    # Cross-engine interop (MIGraphX + hipGraph interposer — detection now, routing roadmap)
+    "migraphx_available",
+    "MIGraphXBackend",
+    "hipgraph_interposer_status",
+    "cross_engine_support",
 ]
 
 # Auto-enable via environment variable

@@ -113,13 +113,20 @@ def enable(*, debug: bool = False, validate: bool = False) -> None:
         _log.info("gfxGRAPH already enabled")
         return
 
+    # Boot-time environment: the bridge REQUIRES ROCm PyTorch — report the version found, or raise a
+    # precise error if torch is missing / a CPU-CUDA wheel. Then read the GPU (adaptive behavior).
+    # (Diagnostics/wavefront stay torch-free; only this activation path requires ROCm torch.)
+    from hipgraph_bridge.hardware import detect_device, require_rocm_torch
+    require_rocm_torch(strict=True)
+    _dev = detect_device()
+
     import torch
 
     if debug:
         _log.setLevel(logging.DEBUG)
         os.environ["HGB_DEBUG"] = "1"
 
-    _log.info("Enabling gfxGRAPH v0.3.4 for gfx1030/RDNA2")
+    _log.info("Enabling gfxGRAPH for %s", _dev.summary() if _dev else "an unknown GPU (gfx1030/RDNA2 assumed)")
 
     # Try to init native bridge (non-fatal if .so not built)
     _init_native(debug)
