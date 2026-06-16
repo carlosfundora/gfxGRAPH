@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 project(gfxGRAPH
     VERSION 0.3.4
     DESCRIPTION "CUDA Graph → HIP Graph translation layer for gfx1030 RDNA2"
-    LANGUAGES CXX HIP
+    LANGUAGES C CXX HIP
 )
 
 include(CheckIPOSupported)
@@ -65,7 +65,15 @@ if(BUILD_CUDA_COMPAT)
     )
     target_link_libraries(cudagraph_compat PRIVATE
         hipgraph_bridge
+        hip::amdhip64
         ${CMAKE_DL_LIBS}
+    )
+    target_include_directories(cudagraph_compat PRIVATE
+        /opt/rocm/include
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    )
+    target_compile_definitions(cudagraph_compat PRIVATE
+        __HIP_PLATFORM_AMD__=1
     )
     set_target_properties(cudagraph_compat PROPERTIES
         OUTPUT_NAME cudagraph_compat

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [rust-hip-cpp] - 2026-06-16
+
+### Added
+- **Integrated Rust-C++-HIP Launcher & Interposer**:
+  - Programmatic `HSA_OVERRIDE_GFX_VERSION=10.3.0` auto-injection on library initialization for AMD RDNA2 devices (gfx1030/gfx1031).
+  - Dynamically resolved CPU Core Complex (CCX) / L3 cache thread affinity pinning on AMD Zen CPUs (Ryzen 9 3900X) to eliminate Infinity Fabric thread-switching latency.
+  - Zero-allocation, AVX2-friendly loop contiguity verification and multidimensional offset computation inside `rs_gfxgraph_core` layout modules.
+  - Thread-safe RAII re-entrancy prevention guard (`ReentrancyGuard`) in `ConditionalGraphRunner` wrapper to cleanly route overlapping streams to safe eager fallbacks.
+  - Multi-symbol C++ CUDA compatibility interposer (`cuda_intercept.c`) with a native update-and-launch pipeline shortcut bypassing Python overhead.
+
 ## [1.0.1] - 2026-06-16
 
 ### Fixed

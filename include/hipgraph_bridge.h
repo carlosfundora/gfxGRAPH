@@ -143,6 +143,12 @@ HGB_EXPORT hipError_t hgb_pipeline_update_kernel(
 
 HGB_EXPORT void hgb_pipeline_destroy(hgb_pipeline_t* pipe);
 
+HGB_EXPORT hipError_t hgb_pipeline_update_and_launch(
+    hgb_pipeline_t*       pipe,
+    hipGraphNode_t        node,
+    hipKernelNodeParams*  params
+);
+
 /* ── Gap 53: Dynamic Shape Management ───────────────── */
 
 typedef hipError_t (*hgb_capture_fn)(int size, hipGraph_t* out, void* ctx);

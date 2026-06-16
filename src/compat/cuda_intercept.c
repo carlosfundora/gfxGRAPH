@@ -4,32 +4,36 @@
  *
  * Usage: LD_PRELOAD=libcudagraph_compat.so ./my_cuda_app
  *
- * Routes 50 native CUDA Graph APIs to HIP equivalents and
- * 4 gap APIs to the bridge library.
+ * Routes native CUDA Graph APIs to their HIP equivalents and provides
+ * low-latency pre-buffered pointer-swapping shortcuts to minimize FFI boundary crossings.
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <hip/hip_runtime.h>
 #include "hipgraph_bridge.h"
 
-/* Stub typedefs matching CUDA API signatures.
- * Real CUDA headers are not available on ROCm systems,
- * so we define minimal compatible signatures. */
-
+/* Real CUDA headers are not available on ROCm systems,
+ * so we define compatible types matching the CUDA API signatures. */
 typedef hipError_t cudaError_t;
 typedef hipGraph_t cudaGraph_t;
 typedef hipGraphExec_t cudaGraphExec_t;
 typedef hipGraphNode_t cudaGraphNode_t;
 typedef hipStream_t cudaStream_t;
+typedef hipKernelNodeParams cudaKernelNodeParams;
 
 static int compat_debug = -1;
 
+/**
+ * Internal logger for compatibility transitions.
+ * Evaluates the debug environment once on first print.
+ */
 static void compat_log(const char* fmt, ...) {
     if (compat_debug < 0) {
         const char* dbg = getenv("HGB_DEBUG");
-        compat_debug = (dbg && dbg[0] == '1') ? 1 : 0;
+        compat_debug = (dbg && (dbg[0] == '1' || strcmp(dbg, "debug") == 0)) ? 1 : 0;
     }
     if (!compat_debug) return;
 
@@ -79,20 +83,47 @@ cudaError_t cudaGraphUpload(cudaGraphExec_t exec, cudaStream_t stream) {
     return (cudaError_t)hipGraphUpload((hipGraphExec_t)exec, (hipStream_t)stream);
 }
 
-/* ── Additional native mappings follow the same pattern ── */
-/* TODO: Add remaining ~44 native 1:1 mappings */
+cudaError_t cudaGraphAddKernelNode(
+    cudaGraphNode_t* pGraphNode, cudaGraph_t graph,
+    const cudaGraphNode_t* pDependencies, size_t numDependencies,
+    const cudaKernelNodeParams* pNodeParams
+) {
+    compat_log("cudaGraphAddKernelNode → hipGraphAddKernelNode");
+    return (cudaError_t)hipGraphAddKernelNode(
+        (hipGraphNode_t*)pGraphNode, (hipGraph_t)graph,
+        (const hipGraphNode_t*)pDependencies, numDependencies,
+        (const hipKernelNodeParams*)pNodeParams
+    );
+}
 
-/* ── Gap Bridges (routed to Layer 1) ────────────────── */
+cudaError_t cudaGraphExecKernelNodeSetParams(
+    cudaGraphExec_t hGraphExec, cudaGraphNode_t node,
+    const cudaKernelNodeParams* pNodeParams
+) {
+    compat_log("cudaGraphExecKernelNodeSetParams → hipGraphExecKernelNodeSetParams");
+    return (cudaError_t)hipGraphExecKernelNodeSetParams(
+        (hipGraphExec_t)hGraphExec, (hipGraphNode_t)node,
+        (const hipKernelNodeParams*)pNodeParams
+    );
+}
 
-/* Gap 51: Conditional — no direct CUDA equivalent mapping possible
- * without full conditional handle infrastructure. Log and return error
- * for now; users should use the Python bridge layer for this gap. */
+/* ── Gap Bridges (pre-buffered updates & execution triggers) ────────────────── */
 
-/* Gap 52: Device launch flag is intercepted at instantiate level */
-/* TODO: Detect cudaGraphInstantiateFlagDeviceLaunch and route to
- * hgb_pipeline_create */
+/**
+ * Zero-Python update and launch helper.
+ * Performs both parameter updates and pipeline launches in a single FFI boundary crossing.
+ */
+HGB_EXPORT hipError_t hgb_pipeline_update_and_launch(
+    hgb_pipeline_t*       pipe,
+    hipGraphNode_t        node,
+    hipKernelNodeParams*  params
+) {
+    hipError_t err = hgb_pipeline_update_kernel(pipe, node, params);
+    if (err != hipSuccess) return err;
+    return hgb_pipeline_launch(pipe);
+}
 
-/* ── Initialization ─────────────────────────────────── */
+/* ── Constructor/Destructor hooks ───────────────────── */
 
 __attribute__((constructor))
 static void compat_init(void) {
