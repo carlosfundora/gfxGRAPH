@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.0.1] - 2026-06-16
+
+### Fixed
+- **`__version__` now reports the real version.** The 1.0.0 wheel shipped with a stale
+  `__version__ = "0.4.0"` constant in `gfxgraph/__init__.py` (package metadata was correct at
+  1.0.0, but `gfxgraph.__version__` — which sglang's `cuda_graph_runner` logs at `enable()` — printed
+  `0.4.0`). Bumped the constant to match the package version. No API or behavior change.
+
 ## [1.0.0] - 2026-06-15
 
 First stable release (promoted from the 0.5.x line; never separately published). Production/Stable.
