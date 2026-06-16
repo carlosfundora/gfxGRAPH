@@ -11,6 +11,11 @@ All notable changes to this project are documented in this file.
   - Zero-allocation, AVX2-friendly loop contiguity verification and multidimensional offset computation inside `rs_gfxgraph_core` layout modules.
   - Thread-safe RAII re-entrancy prevention guard (`ReentrancyGuard`) in `ConditionalGraphRunner` wrapper to cleanly route overlapping streams to safe eager fallbacks.
   - Multi-symbol C++ CUDA compatibility interposer (`cuda_intercept.c`) with a native update-and-launch pipeline shortcut bypassing Python overhead.
+- **Benchmarking & Testing Hardening**:
+  - Added new native C++/HIP test executable `test_routing.hip` to verify shape bucket selection and bounds checks directly on the GPU.
+  - Created `gfxgraph-benchmarking` skill to guide profiling, public benchmarking (`bench_readme_public.py`), and micro-benchmarking on ROCm.
+  - Authored a comprehensive `benchmarking-guide.md` covering the micro-benchmark suites, public GPU benchmark config, and provenance JSON schema.
+  - Patched `bench_routing.py` and `bench_conditional_mock.py` to support graceful mock-execution fallbacks on CPU/system environments.
 
 ## [1.0.1] - 2026-06-16
 
