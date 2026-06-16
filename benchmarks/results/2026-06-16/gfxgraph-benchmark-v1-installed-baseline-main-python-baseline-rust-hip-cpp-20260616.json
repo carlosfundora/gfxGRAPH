@@ -1,0 +1,355 @@
+{
+  "schema_version": "gfxgraph-benchmark-v1",
+  "report_kind": "benchmark_gate_phase_report",
+  "run_id": "main-python-baseline-rust-hip-cpp-20260616",
+  "phase": "installed-baseline",
+  "timestamp_utc": "2026-06-16T14:32:53Z",
+  "report_date": "2026-06-16",
+  "schema_path": "benchmarks/schemas/gfxgraph-benchmark-v1.schema.json",
+  "repo": {
+    "root": "/home/local/ai/projects/gfxGRAPH",
+    "branch": "rust-hip-cpp",
+    "commit": "fe14ca8017e25f29248aa9bcefdb811cbc0c1e5e",
+    "tracked_dirty": true
+  },
+  "environment": {
+    "os": "Linux FRACTAL 6.8.0-90-generic #91-Ubuntu SMP PREEMPT_DYNAMIC Tue Nov 18 14:14:30 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux",
+    "rocm_path": "/opt/rocm",
+    "hipcc_version": "HIP version: 7.2.26015-fc0010cf6a\nAMD clang version 22.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-7.2.0 26014 7b800a19466229b8479a78de19143dc33c3ab9b5)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/rocm-7.2.0/lib/llvm/bin\nConfiguration file: /opt/rocm-7.2.0/lib/llvm/bin/clang++.cfg",
+    "env": {
+      "GFXGRAPH": null,
+      "GFXGRAPH_VALIDATE": null,
+      "GFXGRAPH_VRAM_CAP": null,
+      "HIP_VISIBLE_DEVICES": null,
+      "HSA_OVERRIDE_GFX_VERSION": "10.3.0",
+      "ROCM_PATH": "/opt/rocm"
+    }
+  },
+  "python": {
+    "executable": "/home/local/ai/projects/gfxGRAPH/.venv/bin/python",
+    "imports": [
+      {
+        "direct_url": {
+          "archive_info": {},
+          "url": "file:///home/local/ai/projects/gfxGRAPH/dist/gfxgraph-1.0.1-py3-none-any.whl"
+        },
+        "distribution": "gfxgraph",
+        "distribution_location": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages",
+        "importable": true,
+        "name": "gfxgraph",
+        "origin": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/gfxgraph/__init__.py",
+        "search_locations": [
+          "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/gfxgraph"
+        ],
+        "version": "1.0.1"
+      },
+      {
+        "direct_url": {
+          "archive_info": {},
+          "url": "file:///home/local/ai/projects/gfxGRAPH/dist/gfxgraph-1.0.1-py3-none-any.whl"
+        },
+        "distribution": "gfxgraph",
+        "distribution_location": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages",
+        "importable": true,
+        "name": "hipgraph_bridge",
+        "origin": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/hipgraph_bridge/__init__.py",
+        "search_locations": [
+          "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/hipgraph_bridge"
+        ],
+        "version": "1.0.1"
+      },
+      {
+        "direct_url": {
+          "dir_info": {},
+          "url": "file:///home/local/ai/projects/gfxGRAPH/native"
+        },
+        "distribution": "gfxgraph-native",
+        "distribution_location": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages",
+        "importable": true,
+        "name": "gfxgraph_native",
+        "origin": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/gfxgraph_native/__init__.py",
+        "search_locations": [
+          "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/gfxgraph_native"
+        ],
+        "version": "0.3.3"
+      },
+      {
+        "distribution": "rs-gfxgraph",
+        "importable": false,
+        "name": "rs_gfxgraph",
+        "origin": null,
+        "search_locations": null,
+        "version_error": "PackageNotFoundError('rs-gfxgraph')"
+      },
+      {
+        "distribution": "rs-gfxgraph-stats",
+        "importable": false,
+        "name": "rs_gfxgraph_stats",
+        "origin": null,
+        "search_locations": null,
+        "version_error": "PackageNotFoundError('rs-gfxgraph-stats')"
+      }
+    ],
+    "prefix": "/home/local/ai/projects/gfxGRAPH/.venv",
+    "version": "3.12.7 (main, Oct 16 2024, 04:37:19) [Clang 18.1.8 ]"
+  },
+  "package_state": {
+    "target_import_policy": "site-packages",
+    "graph_enabled": false,
+    "allow_package_changes": true,
+    "package_actions": []
+  },
+  "gate_checks": [
+    {
+      "name": "python-import-isolation",
+      "status": "passed",
+      "message": "installed-baseline imports match site-packages policy",
+      "details": {
+        "checked": [
+          {
+            "importable": true,
+            "in_repo": false,
+            "module": "gfxgraph",
+            "origin": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/gfxgraph/__init__.py"
+          },
+          {
+            "importable": true,
+            "in_repo": false,
+            "module": "hipgraph_bridge",
+            "origin": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/hipgraph_bridge/__init__.py"
+          },
+          {
+            "importable": true,
+            "in_repo": false,
+            "module": "gfxgraph_native",
+            "origin": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/gfxgraph_native/__init__.py"
+          }
+        ]
+      }
+    }
+  ],
+  "benchmarks": [
+    {
+      "name": "python-import-provenance",
+      "kind": "package-provenance",
+      "status": "passed",
+      "command": "/home/local/ai/projects/gfxGRAPH/.venv/bin/python -c <probe>",
+      "iterations": null,
+      "duration_ms": 68.106157,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "{\"executable\": \"/home/local/ai/projects/gfxGRAPH/.venv/bin/python\", \"imports\": [{\"direct_url\": {\"archive_info\": {}, \"url\": \"file:///home/local/ai/projects/gfxGRAPH/dist/gfxgraph-1.0.1-py3-none-any.whl\"}, \"distribution\": \"gfxgraph\", \"distribution_location\": \"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages\", \"importable\": true, \"name\": \"gfxgraph\", \"origin\": \"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/gfxgraph/__init__.py\", \"search_locations\": [\"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/gfxgraph\"], \"version\": \"1.0.1\"}, {\"direct_url\": {\"archive_info\": {}, \"url\": \"file:///home/local/ai/projects/gfxGRAPH/dist/gfxgraph-1.0.1-py3-none-any.whl\"}, \"distribution\": \"gfxgraph\", \"distribution_location\": \"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages\", \"importable\": true, \"name\": \"hipgraph_bridge\", \"origin\": \"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/hipgraph_bridge/__init__.py\", \"search_locations\": [\"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/hipgraph_bridge\"], \"version\": \"1.0.1\"}, {\"direct_url\": {\"dir_info\": {}, \"url\": \"file:///home/local/ai/projects/gfxGRAPH/native\"}, \"distribution\": \"gfxgraph-native\", \"distribution_location\": \"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages\", \"importable\": true, \"name\": \"gfxgraph_native\", \"origin\": \"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/gfxgraph_native/__init__.py\", \"search_locations\": [\"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/gfxgraph_native\"], \"version\": \"0.3.3\"}, {\"distribution\": \"rs-gfxgraph\", \"importable\": false, \"name\": \"rs_gfxgraph\", \"origin\": null, \"search_locations\": null, \"version_error\": \"PackageNotFoundError('rs-gfxgraph')\"}, {\"distribution\": \"rs-gfxgraph-stats\", \"importable\": false, \"name\": \"rs_gfxgraph_stats\", \"origin\": null, \"search_locations\": null, \"version_error\": \"PackageNotFoundError('rs-gfxgraph-stats')\"}], \"prefix\": \"/home/local/ai/projects/gfxGRAPH/.venv\", \"version\": \"3.12.7 (main, Oct 16 2024, 04:37:19) [Clang 18.1.8 ]\"}\n",
+      "stderr_tail": "",
+      "metrics": {}
+    },
+    {
+      "name": "torch-capture-policy",
+      "kind": "capture-policy",
+      "status": "passed",
+      "command": "/home/local/ai/projects/gfxGRAPH/.venv/bin/python -c <capture-policy-probe>",
+      "iterations": null,
+      "duration_ms": 21640.553087,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "{\"GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE\": null, \"cuda_available\": true, \"cuda_execution_error\": \"CUDA execution probe passed\", \"cuda_execution_usable\": true, \"device\": \"AMD Radeon RX 6700 XT\", \"torch\": \"2.13.0a0+git53bbebe\", \"torch_graph_capture_block_reason\": \"high-level torch.cuda.graph capture is disabled by default on ROCm/HIP 7.2.26015; set GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE=1 to opt in\", \"torch_hip\": \"7.2.26015\", \"unsafe_torch_graph_capture_enabled\": false}\n",
+      "stderr_tail": "",
+      "metrics": {
+        "probe": {
+          "GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE": null,
+          "cuda_available": true,
+          "cuda_execution_error": "CUDA execution probe passed",
+          "cuda_execution_usable": true,
+          "device": "AMD Radeon RX 6700 XT",
+          "torch": "2.13.0a0+git53bbebe",
+          "torch_graph_capture_block_reason": "high-level torch.cuda.graph capture is disabled by default on ROCm/HIP 7.2.26015; set GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE=1 to opt in",
+          "torch_hip": "7.2.26015",
+          "unsafe_torch_graph_capture_enabled": false
+        }
+      }
+    },
+    {
+      "name": "rust-bucket-router-core",
+      "kind": "rust-micro",
+      "status": "passed",
+      "command": "in-process BucketRouterCore::route loop",
+      "iterations": 200000,
+      "duration_ms": 56.899409,
+      "throughput_ops_per_sec": 3514974.9973677234,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "metrics": {
+        "bucket_count": 10,
+        "ready_routes": 200000
+      }
+    },
+    {
+      "name": "rust-stats-sample-update",
+      "kind": "rust-micro",
+      "status": "passed",
+      "command": "in-process GfxGraphStatsSample update loop",
+      "iterations": 200000,
+      "duration_ms": 1.3558109999999999,
+      "throughput_ops_per_sec": 147513185.83489883,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "metrics": {
+        "failures": 196,
+        "samples": 200000
+      }
+    },
+    {
+      "name": "native-hip-benchmark",
+      "kind": "hip-native",
+      "status": "passed",
+      "command": "/home/local/ai/projects/gfxGRAPH/build/benchmark_pipeline",
+      "iterations": null,
+      "duration_ms": 400.380518,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "=== benchmark_pipeline ===\nWarmup launches: 100\nMeasured launches: 10000\nAverage pipeline launch latency: 26.40 us\n",
+      "stderr_tail": "",
+      "metrics": {}
+    },
+    {
+      "name": "native-hip-tests",
+      "kind": "hip-native",
+      "status": "passed",
+      "command": "ctest --test-dir /home/local/ai/projects/gfxGRAPH/build --output-on-failure",
+      "iterations": null,
+      "duration_ms": 1310.670206,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "Test project /home/local/ai/projects/gfxGRAPH/build\n    Start 1: conditional\n1/5 Test #1: conditional ......................   Passed    0.16 sec\n    Start 2: pipeline\n2/5 Test #2: pipeline .........................   Passed    0.17 sec\n    Start 3: shapes\n3/5 Test #3: shapes ...........................   Passed    0.30 sec\n    Start 4: compositor\n4/5 Test #4: compositor .......................   Passed    0.33 sec\n    Start 5: routing\n5/5 Test #5: routing ..........................   Passed    0.23 sec\n\n100% tests passed, 0 tests failed out of 5\n\nTotal Test time (real) =   1.19 sec\n",
+      "stderr_tail": "",
+      "metrics": {}
+    },
+    {
+      "name": "readme-public-benchmark",
+      "kind": "python-public",
+      "status": "passed",
+      "command": "/home/local/ai/projects/gfxGRAPH/.venv/bin/python benchmarks/bench_readme_public.py --output benchmarks/results/2026-06-16/readme-public-installed-baseline-main-python-baseline-rust-hip-cpp-20260616.json --run-count 3",
+      "iterations": null,
+      "duration_ms": 14230.535404,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "{\n  \"timestamp_utc\": \"2026-06-16T14:33:30Z\",\n  \"commit_sha\": \"fe14ca8017e25f29248aa9bcefdb811cbc0c1e5e\",\n  \"run_count\": 3,\n  \"env\": {\n    \"torch\": \"2.13.0a0+git53bbebe\",\n    \"device\": \"AMD Radeon RX 6700 XT\",\n    \"rocm\": {\n      \"runtime_from_torch\": \"7.2.26015\",\n      \"driver_from_hipconfig\": \"7.2.26015-fc0010cf6a\",\n      \"runtime_from_rocminfo\": \"Runtime Version:         1.18\"\n    },\n    \"env\": {\n      \"HSA_OVERRIDE_GFX_VERSION\": \"10.3.0\",\n      \"PYTORCH_ROCM_ARCH\": null,\n      \"GFXGRAPH\": null,\n      \"GFXGRAPH_VRAM_CAP\": null,\n      \"SGLANG_RDNA2_KERNELS\": null,\n      \"HIP_VISIBLE_DEVICES\": null,\n      \"CUDA_VISIBLE_DEVICES\": null\n    }\n  },\n  \"results\": [\n    {\n      \"workload\": \"decode_like_layernorm_gelu_chain_bs1_d1024\",\n      \"iters\": 2000,\n      \"run_count\": 3,\n      \"eager_ms_per_iter\": 0.16348431649930717,\n      \"graph_ms_per_iter\": 0.20575329900020733,\n      \"eager_ms_per_iter_runs\": [\n        0.16643990649936313,\n        0.16348431649930717,\n        0.16239262800081633\n      ],\n      \"graph_ms_per_iter_runs\": [\n        0.21657518900065043,\n        0.20296334449994902,\n        0.20575329900020733\n      ],\n      \"speedup_x\": 0.794564739878812,\n      \"fallback\": true\n    },\n    {\n      \"workload\": \"mlp_bs32_d1024\",\n      \"iters\": 1500,\n      \"run_count\": 3,\n      \"eager_ms_per_iter\": 0.10626193933421746,\n      \"graph_ms_per_iter\": 0.10674115866519666,\n      \"eager_ms_per_iter_runs\": [\n        0.10626193933421746,\n        0.10758362066796205,\n        0.10621896066732006\n      ],\n      \"graph_ms_per_iter_runs\": [\n        0.10652992466687768,\n        0.10690318066675293,\n        0.10674115866519666\n      ],\n      \"speedup_x\": 0.9955104541025049,\n      \"fallback\": true\n    },\n    {\n      \"workload\": \"mlp_bs128_d2048\",\n      \"iters\": 300,\n      \"run_count\": 3,\n      \"eager_ms_per_iter\": 0.6403489033255028,\n      \"graph_ms_per_iter\": 0.6404162000035285,\n      \"eager_ms_per_iter_runs\": [\n        0.6403489033255028,\n        0.6421439200009141,\n        0.6369884666613265\n      ],\n      \"graph_ms_per_iter_runs\": [\n        0.6404162000035285,\n        0.6404631666737259,\n        0.6363502833240394\n      ],\n      \"speedup_x\": 0.9998949172771935,\n      \"fallback\": true\n    }\n  ]\n}\n",
+      "stderr_tail": "[gfxgRAPH] WARNING: Graph capture_begin failed: high-level torch.cuda.graph capture is disabled by default on ROCm/HIP 7.2.26015; set GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE=1 to opt in — using eager fallback\n[gfxgRAPH] WARNING: Graph capture_begin failed: high-level torch.cuda.graph capture is disabled by default on ROCm/HIP 7.2.26015; set GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE=1 to opt in — using eager fallback\n[gfxgRAPH] WARNING: Graph capture_begin failed: high-level torch.cuda.graph capture is disabled by default on ROCm/HIP 7.2.26015; set GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE=1 to opt in — using eager fallback\n[gfxgRAPH] WARNING: Graph capture_begin failed: high-level torch.cuda.graph capture is disabled by default on ROCm/HIP 7.2.26015; set GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE=1 to opt in — using eager fallback\n[gfxgRAPH] WARNING: Graph capture_begin failed: high-level torch.cuda.graph capture is disabled by default on ROCm/HIP 7.2.26015; set GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE=1 to opt in — using eager fallback\n[gfxgRAPH] WARNING: Graph capture_begin failed: high-level torch.cuda.graph capture is disabled by default on ROCm/HIP 7.2.26015; set GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE=1 to opt in — using eager fallback\n[gfxgRAPH] WARNING: Graph capture_begin failed: high-level torch.cuda.graph capture is disabled by default on ROCm/HIP 7.2.26015; set GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE=1 to opt in — using eager fallback\n[gfxgRAPH] WARNING: Graph capture_begin failed: high-level torch.cuda.graph capture is disabled by default on ROCm/HIP 7.2.26015; set GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE=1 to opt in — using eager fallback\n[gfxgRAPH] WARNING: Graph capture_begin failed: high-level torch.cuda.graph capture is disabled by default on ROCm/HIP 7.2.26015; set GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE=1 to opt in — using eager fallback\n",
+      "metrics": {
+        "all_workloads_fallback": true,
+        "fallback_workload_count": 3,
+        "fallback_workloads": [
+          {
+            "eager_ms_per_iter": 0.16348431649930717,
+            "graph_ms_per_iter": 0.2057532990002073,
+            "speedup_x": 0.794564739878812,
+            "workload": "decode_like_layernorm_gelu_chain_bs1_d1024"
+          },
+          {
+            "eager_ms_per_iter": 0.10626193933421746,
+            "graph_ms_per_iter": 0.10674115866519666,
+            "speedup_x": 0.9955104541025048,
+            "workload": "mlp_bs32_d1024"
+          },
+          {
+            "eager_ms_per_iter": 0.6403489033255028,
+            "graph_ms_per_iter": 0.6404162000035285,
+            "speedup_x": 0.9998949172771936,
+            "workload": "mlp_bs128_d2048"
+          }
+        ],
+        "payload": {
+          "commit_sha": "fe14ca8017e25f29248aa9bcefdb811cbc0c1e5e",
+          "env": {
+            "device": "AMD Radeon RX 6700 XT",
+            "env": {
+              "CUDA_VISIBLE_DEVICES": null,
+              "GFXGRAPH": null,
+              "GFXGRAPH_VRAM_CAP": null,
+              "HIP_VISIBLE_DEVICES": null,
+              "HSA_OVERRIDE_GFX_VERSION": "10.3.0",
+              "PYTORCH_ROCM_ARCH": null,
+              "SGLANG_RDNA2_KERNELS": null
+            },
+            "rocm": {
+              "driver_from_hipconfig": "7.2.26015-fc0010cf6a",
+              "runtime_from_rocminfo": "Runtime Version:         1.18",
+              "runtime_from_torch": "7.2.26015"
+            },
+            "torch": "2.13.0a0+git53bbebe"
+          },
+          "results": [
+            {
+              "eager_ms_per_iter": 0.16348431649930717,
+              "eager_ms_per_iter_runs": [
+                0.16643990649936313,
+                0.16348431649930717,
+                0.16239262800081633
+              ],
+              "fallback": true,
+              "graph_ms_per_iter": 0.2057532990002073,
+              "graph_ms_per_iter_runs": [
+                0.21657518900065045,
+                0.20296334449994904,
+                0.2057532990002073
+              ],
+              "iters": 2000,
+              "run_count": 3,
+              "speedup_x": 0.794564739878812,
+              "workload": "decode_like_layernorm_gelu_chain_bs1_d1024"
+            },
+            {
+              "eager_ms_per_iter": 0.10626193933421746,
+              "eager_ms_per_iter_runs": [
+                0.10626193933421746,
+                0.10758362066796204,
+                0.10621896066732006
+              ],
+              "fallback": true,
+              "graph_ms_per_iter": 0.10674115866519666,
+              "graph_ms_per_iter_runs": [
+                0.10652992466687768,
+                0.10690318066675292,
+                0.10674115866519666
+              ],
+              "iters": 1500,
+              "run_count": 3,
+              "speedup_x": 0.9955104541025048,
+              "workload": "mlp_bs32_d1024"
+            },
+            {
+              "eager_ms_per_iter": 0.6403489033255028,
+              "eager_ms_per_iter_runs": [
+                0.6403489033255028,
+                0.6421439200009141,
+                0.6369884666613265
+              ],
+              "fallback": true,
+              "graph_ms_per_iter": 0.6404162000035285,
+              "graph_ms_per_iter_runs": [
+                0.6404162000035285,
+                0.6404631666737259,
+                0.6363502833240394
+              ],
+              "iters": 300,
+              "run_count": 3,
+              "speedup_x": 0.9998949172771936,
+              "workload": "mlp_bs128_d2048"
+            }
+          ],
+          "run_count": 3,
+          "timestamp_utc": "2026-06-16T14:33:30Z"
+        },
+        "workload_count": 3
+      }
+    },
+    {
+      "name": "legacy-python-microbenchmarks",
+      "kind": "python-micro",
+      "status": "skipped",
+      "command": "",
+      "iterations": null,
+      "duration_ms": null,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "metrics": {
+        "skip_reason": "skipped; pass --include-python-micro to run legacy Python microbenchmarks"
+      }
+    }
+  ]
+}

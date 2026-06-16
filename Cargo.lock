@@ -2347,12 +2347,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "rs_gfxgraph_bench"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "rs_gfxgraph_core",
+ "rs_gfxgraph_native",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rs_gfxgraph_core"
 version = "0.1.0"
 dependencies = [
  "parking_lot",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "rs_gfxgraph_native"
+version = "0.1.0"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

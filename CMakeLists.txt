@@ -17,6 +17,8 @@ find_package(hip REQUIRED)
 # ── Layer 1: Core bridge library ───────────────────────
 add_library(hipgraph_bridge SHARED
     src/init.cpp
+    src/profiler.cpp
+    src/runtime_handles.cpp
     src/conditional_bridge.hip
     src/launch_pipeline.hip
     src/shape_manager.hip
@@ -90,6 +92,14 @@ if(BUILD_TESTS)
         target_link_libraries(test_${gap} PRIVATE hipgraph_bridge)
         add_test(NAME ${gap} COMMAND test_${gap})
     endforeach()
+
+    add_executable(test_profiler tests/test_profiler.hip)
+    target_link_libraries(test_profiler PRIVATE hipgraph_bridge)
+    add_test(NAME profiler COMMAND test_profiler)
+
+    add_executable(test_runtime_handles tests/test_runtime_handles.hip)
+    target_link_libraries(test_runtime_handles PRIVATE hipgraph_bridge)
+    add_test(NAME runtime_handles COMMAND test_runtime_handles)
 
     if(BUILD_CUDA_COMPAT)
         add_test(

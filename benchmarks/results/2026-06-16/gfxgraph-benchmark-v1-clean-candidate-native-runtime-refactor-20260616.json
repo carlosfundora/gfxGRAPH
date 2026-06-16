@@ -1,0 +1,393 @@
+{
+  "schema_version": "gfxgraph-benchmark-v1",
+  "report_kind": "benchmark_gate_phase_report",
+  "run_id": "native-runtime-refactor-20260616",
+  "phase": "clean-candidate",
+  "timestamp_utc": "2026-06-16T14:59:31Z",
+  "report_date": "2026-06-16",
+  "schema_path": "benchmarks/schemas/gfxgraph-benchmark-v1.schema.json",
+  "repo": {
+    "root": "/home/local/ai/projects/gfxGRAPH",
+    "branch": "rust-hip-cpp",
+    "commit": "fe14ca8017e25f29248aa9bcefdb811cbc0c1e5e",
+    "tracked_dirty": true
+  },
+  "environment": {
+    "os": "Linux FRACTAL 6.8.0-90-generic #91-Ubuntu SMP PREEMPT_DYNAMIC Tue Nov 18 14:14:30 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux",
+    "rocm_path": "/opt/rocm",
+    "hipcc_version": "HIP version: 7.2.26015-fc0010cf6a\nAMD clang version 22.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-7.2.0 26014 7b800a19466229b8479a78de19143dc33c3ab9b5)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/rocm-7.2.0/lib/llvm/bin\nConfiguration file: /opt/rocm-7.2.0/lib/llvm/bin/clang++.cfg",
+    "env": {
+      "GFXGRAPH": null,
+      "GFXGRAPH_VALIDATE": null,
+      "GFXGRAPH_VRAM_CAP": null,
+      "HIP_VISIBLE_DEVICES": null,
+      "HSA_OVERRIDE_GFX_VERSION": "10.3.0",
+      "ROCM_PATH": "/opt/rocm"
+    }
+  },
+  "python": {
+    "executable": "/home/local/ai/projects/gfxGRAPH/.venv/bin/python",
+    "imports": [
+      {
+        "direct_url": {
+          "dir_info": {
+            "editable": true
+          },
+          "url": "file:///home/local/ai/projects/gfxGRAPH"
+        },
+        "distribution": "gfxgraph",
+        "distribution_location": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages",
+        "importable": true,
+        "name": "gfxgraph",
+        "origin": "/home/local/ai/projects/gfxGRAPH/python/gfxgraph/__init__.py",
+        "search_locations": [
+          "/home/local/ai/projects/gfxGRAPH/python/gfxgraph"
+        ],
+        "version": "1.0.1"
+      },
+      {
+        "direct_url": {
+          "dir_info": {
+            "editable": true
+          },
+          "url": "file:///home/local/ai/projects/gfxGRAPH"
+        },
+        "distribution": "gfxgraph",
+        "distribution_location": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages",
+        "importable": true,
+        "name": "hipgraph_bridge",
+        "origin": "/home/local/ai/projects/gfxGRAPH/python/hipgraph_bridge/__init__.py",
+        "search_locations": [
+          "/home/local/ai/projects/gfxGRAPH/python/hipgraph_bridge"
+        ],
+        "version": "1.0.1"
+      },
+      {
+        "direct_url": {
+          "dir_info": {
+            "editable": true
+          },
+          "url": "file:///home/local/ai/projects/gfxGRAPH/native"
+        },
+        "distribution": "gfxgraph-native",
+        "distribution_location": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages",
+        "importable": true,
+        "name": "gfxgraph_native",
+        "origin": "/home/local/ai/projects/gfxGRAPH/native/gfxgraph_native/__init__.py",
+        "search_locations": [
+          "/home/local/ai/projects/gfxGRAPH/native/gfxgraph_native"
+        ],
+        "version": "0.3.3"
+      },
+      {
+        "direct_url": {
+          "dir_info": {
+            "editable": true
+          },
+          "url": "file:///home/local/ai/projects/gfxGRAPH/rust/rs_gfxgraph"
+        },
+        "distribution": "rs-gfxgraph",
+        "distribution_location": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages",
+        "importable": true,
+        "name": "rs_gfxgraph",
+        "origin": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/rs_gfxgraph/__init__.py",
+        "search_locations": [
+          "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/rs_gfxgraph"
+        ],
+        "version": "0.1.0"
+      },
+      {
+        "direct_url": {
+          "dir_info": {
+            "editable": true
+          },
+          "url": "file:///home/local/ai/projects/gfxGRAPH/rust/rs_gfxgraph_stats"
+        },
+        "distribution": "rs-gfxgraph-stats",
+        "distribution_location": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages",
+        "importable": true,
+        "name": "rs_gfxgraph_stats",
+        "origin": "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/rs_gfxgraph_stats/__init__.py",
+        "search_locations": [
+          "/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/rs_gfxgraph_stats"
+        ],
+        "version": "0.1.0"
+      }
+    ],
+    "prefix": "/home/local/ai/projects/gfxGRAPH/.venv",
+    "version": "3.12.7 (main, Oct 16 2024, 04:37:19) [Clang 18.1.8 ]"
+  },
+  "package_state": {
+    "target_import_policy": "repo",
+    "graph_enabled": false,
+    "allow_package_changes": true,
+    "package_actions": [
+      {
+        "name": "uv-uninstall-installed-python-packages",
+        "command": "uv pip uninstall --python /home/local/ai/projects/gfxGRAPH/.venv/bin/python gfxgraph gfxgraph-native rs-gfxgraph rs-gfxgraph-stats",
+        "status": "passed",
+        "duration_ms": 13.364291,
+        "exit_code": 0,
+        "stdout_tail": "",
+        "stderr_tail": "Uninstalled 4 packages in 3ms\n - gfxgraph==1.0.1 (from file:///home/local/ai/projects/gfxGRAPH)\n - gfxgraph-native==0.3.3 (from file:///home/local/ai/projects/gfxGRAPH/native)\n - rs-gfxgraph==0.1.0 (from file:///home/local/ai/projects/gfxGRAPH/rust/rs_gfxgraph)\n - rs-gfxgraph-stats==0.1.0 (from file:///home/local/ai/projects/gfxGRAPH/rust/rs_gfxgraph_stats)\n"
+      },
+      {
+        "name": "uv-install-candidate-gfxgraph",
+        "command": "uv pip install --python /home/local/ai/projects/gfxGRAPH/.venv/bin/python --no-deps -e /home/local/ai/projects/gfxGRAPH",
+        "status": "passed",
+        "duration_ms": 1211.933081,
+        "exit_code": 0,
+        "stdout_tail": "",
+        "stderr_tail": "Resolved 1 package in 1ms\n   Building gfxgraph @ file:///home/local/ai/projects/gfxGRAPH\n      Built gfxgraph @ file:///home/local/ai/projects/gfxGRAPH\nPrepared 1 package in 1.11s\nwarning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n         If the cache and target directories are on different filesystems, hardlinking may not be supported.\n         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.\nInstalled 1 package in 4ms\n + gfxgraph==1.0.1 (from file:///home/local/ai/projects/gfxGRAPH)\n"
+      },
+      {
+        "name": "uv-install-candidate-gfxgraph-native",
+        "command": "uv pip install --python /home/local/ai/projects/gfxGRAPH/.venv/bin/python --no-deps -e /home/local/ai/projects/gfxGRAPH/native",
+        "status": "passed",
+        "duration_ms": 4458.308616,
+        "exit_code": 0,
+        "stdout_tail": "",
+        "stderr_tail": "Resolved 1 package in 1ms\n   Building gfxgraph-native @ file:///home/local/ai/projects/gfxGRAPH/native\n      Built gfxgraph-native @ file:///home/local/ai/projects/gfxGRAPH/native\nPrepared 1 package in 4.31s\nwarning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.\n         If the cache and target directories are on different filesystems, hardlinking may not be supported.\n         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.\nInstalled 1 package in 9ms\n + gfxgraph-native==0.3.3 (from file:///home/local/ai/projects/gfxGRAPH/native)\n"
+      },
+      {
+        "name": "maturin-develop-rs-gfxgraph-uv",
+        "command": "maturin develop --uv --release",
+        "status": "passed",
+        "duration_ms": 1142.837892,
+        "exit_code": 0,
+        "stdout_tail": "✏️ Setting installed package as editable\n",
+        "stderr_tail": "🐍 Found CPython 3.12 at /home/local/ai/projects/gfxGRAPH/.venv/bin/python\n🔗 Found pyo3 bindings\n    Finished `release` profile [optimized] target(s) in 0.13s\n📦 Built wheel for CPython 3.12 to /tmp/.tmpGypcrL/rs_gfxgraph-0.1.0-cp312-cp312-linux_x86_64.whl\n🛠 Installed rs_gfxgraph-0.1.0\n"
+      },
+      {
+        "name": "maturin-develop-rs-gfxgraph-stats-uv",
+        "command": "maturin develop --uv --release",
+        "status": "passed",
+        "duration_ms": 1108.280516,
+        "exit_code": 0,
+        "stdout_tail": "✏️ Setting installed package as editable\n",
+        "stderr_tail": "🐍 Found CPython 3.12 at /home/local/ai/projects/gfxGRAPH/.venv/bin/python\n🔗 Found pyo3 bindings\n    Finished `release` profile [optimized] target(s) in 0.13s\n📦 Built wheel for CPython 3.12 to /tmp/.tmphsOY3X/rs_gfxgraph_stats-0.1.0-cp312-cp312-linux_x86_64.whl\n🛠 Installed rs_gfxgraph_stats-0.1.0\n"
+      }
+    ]
+  },
+  "gate_checks": [
+    {
+      "name": "candidate-package-transition",
+      "status": "passed",
+      "message": "UV package uninstall/install transition completed",
+      "details": {
+        "actions": [
+          {
+            "exit_code": 0,
+            "name": "uv-uninstall-installed-python-packages",
+            "status": "passed"
+          },
+          {
+            "exit_code": 0,
+            "name": "uv-install-candidate-gfxgraph",
+            "status": "passed"
+          },
+          {
+            "exit_code": 0,
+            "name": "uv-install-candidate-gfxgraph-native",
+            "status": "passed"
+          },
+          {
+            "exit_code": 0,
+            "name": "maturin-develop-rs-gfxgraph-uv",
+            "status": "passed"
+          },
+          {
+            "exit_code": 0,
+            "name": "maturin-develop-rs-gfxgraph-stats-uv",
+            "status": "passed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "python-import-isolation",
+      "status": "passed",
+      "message": "clean-candidate imports match repo policy",
+      "details": {
+        "checked": [
+          {
+            "importable": true,
+            "in_repo": true,
+            "module": "gfxgraph",
+            "origin": "/home/local/ai/projects/gfxGRAPH/python/gfxgraph/__init__.py"
+          },
+          {
+            "importable": true,
+            "in_repo": true,
+            "module": "hipgraph_bridge",
+            "origin": "/home/local/ai/projects/gfxGRAPH/python/hipgraph_bridge/__init__.py"
+          },
+          {
+            "importable": true,
+            "in_repo": true,
+            "module": "gfxgraph_native",
+            "origin": "/home/local/ai/projects/gfxGRAPH/native/gfxgraph_native/__init__.py"
+          }
+        ]
+      }
+    }
+  ],
+  "benchmarks": [
+    {
+      "name": "python-import-provenance",
+      "kind": "package-provenance",
+      "status": "passed",
+      "command": "/home/local/ai/projects/gfxGRAPH/.venv/bin/python -c <probe>",
+      "iterations": null,
+      "duration_ms": 70.988598,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "{\"executable\": \"/home/local/ai/projects/gfxGRAPH/.venv/bin/python\", \"imports\": [{\"direct_url\": {\"dir_info\": {\"editable\": true}, \"url\": \"file:///home/local/ai/projects/gfxGRAPH\"}, \"distribution\": \"gfxgraph\", \"distribution_location\": \"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages\", \"importable\": true, \"name\": \"gfxgraph\", \"origin\": \"/home/local/ai/projects/gfxGRAPH/python/gfxgraph/__init__.py\", \"search_locations\": [\"/home/local/ai/projects/gfxGRAPH/python/gfxgraph\"], \"version\": \"1.0.1\"}, {\"direct_url\": {\"dir_info\": {\"editable\": true}, \"url\": \"file:///home/local/ai/projects/gfxGRAPH\"}, \"distribution\": \"gfxgraph\", \"distribution_location\": \"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages\", \"importable\": true, \"name\": \"hipgraph_bridge\", \"origin\": \"/home/local/ai/projects/gfxGRAPH/python/hipgraph_bridge/__init__.py\", \"search_locations\": [\"/home/local/ai/projects/gfxGRAPH/python/hipgraph_bridge\"], \"version\": \"1.0.1\"}, {\"direct_url\": {\"dir_info\": {\"editable\": true}, \"url\": \"file:///home/local/ai/projects/gfxGRAPH/native\"}, \"distribution\": \"gfxgraph-native\", \"distribution_location\": \"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages\", \"importable\": true, \"name\": \"gfxgraph_native\", \"origin\": \"/home/local/ai/projects/gfxGRAPH/native/gfxgraph_native/__init__.py\", \"search_locations\": [\"/home/local/ai/projects/gfxGRAPH/native/gfxgraph_native\"], \"version\": \"0.3.3\"}, {\"direct_url\": {\"dir_info\": {\"editable\": true}, \"url\": \"file:///home/local/ai/projects/gfxGRAPH/rust/rs_gfxgraph\"}, \"distribution\": \"rs-gfxgraph\", \"distribution_location\": \"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages\", \"importable\": true, \"name\": \"rs_gfxgraph\", \"origin\": \"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/rs_gfxgraph/__init__.py\", \"search_locations\": [\"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/rs_gfxgraph\"], \"version\": \"0.1.0\"}, {\"direct_url\": {\"dir_info\": {\"editable\": true}, \"url\": \"file:///home/local/ai/projects/gfxGRAPH/rust/rs_gfxgraph_stats\"}, \"distribution\": \"rs-gfxgraph-stats\", \"distribution_location\": \"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages\", \"importable\": true, \"name\": \"rs_gfxgraph_stats\", \"origin\": \"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/rs_gfxgraph_stats/__init__.py\", \"search_locations\": [\"/home/local/ai/projects/gfxGRAPH/.venv/lib/python3.12/site-packages/rs_gfxgraph_stats\"], \"version\": \"0.1.0\"}], \"prefix\": \"/home/local/ai/projects/gfxGRAPH/.venv\", \"version\": \"3.12.7 (main, Oct 16 2024, 04:37:19) [Clang 18.1.8 ]\"}\n",
+      "stderr_tail": "",
+      "metrics": {}
+    },
+    {
+      "name": "torch-capture-policy",
+      "kind": "capture-policy",
+      "status": "passed",
+      "command": "/home/local/ai/projects/gfxGRAPH/.venv/bin/python -c <capture-policy-probe>",
+      "iterations": null,
+      "duration_ms": 17906.115315000003,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "{\"GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE\": null, \"cuda_available\": true, \"cuda_execution_error\": \"CUDA execution probe passed\", \"cuda_execution_usable\": true, \"device\": \"AMD Radeon RX 6700 XT\", \"torch\": \"2.13.0a0+git53bbebe\", \"torch_graph_capture_block_reason\": \"high-level torch.cuda.graph capture is disabled by default on ROCm/HIP 7.2.26015; set GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE=1 to opt in\", \"torch_hip\": \"7.2.26015\", \"unsafe_torch_graph_capture_enabled\": false}\n",
+      "stderr_tail": "",
+      "metrics": {
+        "probe": {
+          "GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE": null,
+          "cuda_available": true,
+          "cuda_execution_error": "CUDA execution probe passed",
+          "cuda_execution_usable": true,
+          "device": "AMD Radeon RX 6700 XT",
+          "torch": "2.13.0a0+git53bbebe",
+          "torch_graph_capture_block_reason": "high-level torch.cuda.graph capture is disabled by default on ROCm/HIP 7.2.26015; set GFXGRAPH_ENABLE_UNSAFE_TORCH_GRAPH_CAPTURE=1 to opt in",
+          "torch_hip": "7.2.26015",
+          "unsafe_torch_graph_capture_enabled": false
+        }
+      }
+    },
+    {
+      "name": "rust-bucket-router-core",
+      "kind": "rust-micro",
+      "status": "passed",
+      "command": "in-process BucketRouterCore::route loop",
+      "iterations": 200000,
+      "duration_ms": 93.68010100000001,
+      "throughput_ops_per_sec": 2134925.110723354,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "metrics": {
+        "bucket_count": 10,
+        "ready_routes": 200000
+      }
+    },
+    {
+      "name": "rust-stats-sample-update",
+      "kind": "rust-micro",
+      "status": "passed",
+      "command": "in-process GfxGraphStatsSample update loop",
+      "iterations": 200000,
+      "duration_ms": 1.35333,
+      "throughput_ops_per_sec": 147783615.23057938,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "metrics": {
+        "failures": 196,
+        "samples": 200000
+      }
+    },
+    {
+      "name": "rust-native-runtime-ffi",
+      "kind": "rust-native",
+      "status": "passed",
+      "command": "NativeBridge::open_default(/home/local/ai/projects/gfxGRAPH)",
+      "iterations": null,
+      "duration_ms": 35.615806,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "metrics": {
+        "init_error": null,
+        "initialized": true,
+        "library_path": "/home/local/ai/projects/gfxGRAPH/build/libhipgraph_bridge.so",
+        "profiler_counters": {
+          "capacity": 4096,
+          "dropped": 0,
+          "written": 1
+        },
+        "recorded_seq": 1,
+        "sample_count": 1,
+        "version": {
+          "gfx_target": "gfx1030",
+          "major": 0,
+          "minor": 3,
+          "patch": 4,
+          "rocm_version": "7.2.26015"
+        }
+      }
+    },
+    {
+      "name": "native-hip-benchmark",
+      "kind": "hip-native",
+      "status": "passed",
+      "command": "/home/local/ai/projects/gfxGRAPH/build/benchmark_pipeline",
+      "iterations": 10000,
+      "duration_ms": 395.006101,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "=== benchmark_pipeline ===\nWarmup launches: 100\nMeasured launches: 10000\nAverage pipeline launch latency: 25.67 us\nDevice clock64 probe cycles: 358390\nProfiler samples copied: 16\nProfiler events written: 10103\nProfiler events dropped: 6007\n",
+      "stderr_tail": "",
+      "metrics": {
+        "average_pipeline_launch_latency_us": 25.67,
+        "device_clock64_probe_cycles": 358390,
+        "measured_launches": 10000,
+        "profiler_events_dropped": 6007,
+        "profiler_events_written": 10103,
+        "profiler_samples_copied": 16,
+        "warmup_launches": 100
+      }
+    },
+    {
+      "name": "native-hip-tests",
+      "kind": "hip-native",
+      "status": "passed",
+      "command": "ctest --test-dir /home/local/ai/projects/gfxGRAPH/build --output-on-failure",
+      "iterations": null,
+      "duration_ms": 1503.293347,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "Test project /home/local/ai/projects/gfxGRAPH/build\n    Start 1: conditional\n1/7 Test #1: conditional ......................   Passed    0.16 sec\n    Start 2: pipeline\n2/7 Test #2: pipeline .........................   Passed    0.16 sec\n    Start 3: shapes\n3/7 Test #3: shapes ...........................   Passed    0.29 sec\n    Start 4: compositor\n4/7 Test #4: compositor .......................   Passed    0.31 sec\n    Start 5: routing\n5/7 Test #5: routing ..........................   Passed    0.23 sec\n    Start 6: profiler\n6/7 Test #6: profiler .........................   Passed    0.04 sec\n    Start 7: runtime_handles\n7/7 Test #7: runtime_handles ..................   Passed    0.18 sec\n\n100% tests passed, 0 tests failed out of 7\n\nTotal Test time (real) =   1.39 sec\n",
+      "stderr_tail": "",
+      "metrics": {}
+    },
+    {
+      "name": "readme-public-benchmark",
+      "kind": "python-public",
+      "status": "skipped",
+      "command": "",
+      "iterations": null,
+      "duration_ms": null,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "metrics": {
+        "skip_reason": "skipped by --skip-public"
+      }
+    },
+    {
+      "name": "legacy-python-microbenchmarks",
+      "kind": "python-micro",
+      "status": "skipped",
+      "command": "",
+      "iterations": null,
+      "duration_ms": null,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "metrics": {
+        "skip_reason": "skipped; pass --include-python-micro to run legacy Python microbenchmarks"
+      }
+    }
+  ]
+}

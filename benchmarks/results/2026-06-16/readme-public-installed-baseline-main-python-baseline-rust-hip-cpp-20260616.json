@@ -1,0 +1,82 @@
+{
+  "timestamp_utc": "2026-06-16T14:33:30Z",
+  "commit_sha": "fe14ca8017e25f29248aa9bcefdb811cbc0c1e5e",
+  "run_count": 3,
+  "env": {
+    "torch": "2.13.0a0+git53bbebe",
+    "device": "AMD Radeon RX 6700 XT",
+    "rocm": {
+      "runtime_from_torch": "7.2.26015",
+      "driver_from_hipconfig": "7.2.26015-fc0010cf6a",
+      "runtime_from_rocminfo": "Runtime Version:         1.18"
+    },
+    "env": {
+      "HSA_OVERRIDE_GFX_VERSION": "10.3.0",
+      "PYTORCH_ROCM_ARCH": null,
+      "GFXGRAPH": null,
+      "GFXGRAPH_VRAM_CAP": null,
+      "SGLANG_RDNA2_KERNELS": null,
+      "HIP_VISIBLE_DEVICES": null,
+      "CUDA_VISIBLE_DEVICES": null
+    }
+  },
+  "results": [
+    {
+      "workload": "decode_like_layernorm_gelu_chain_bs1_d1024",
+      "iters": 2000,
+      "run_count": 3,
+      "eager_ms_per_iter": 0.16348431649930717,
+      "graph_ms_per_iter": 0.20575329900020733,
+      "eager_ms_per_iter_runs": [
+        0.16643990649936313,
+        0.16348431649930717,
+        0.16239262800081633
+      ],
+      "graph_ms_per_iter_runs": [
+        0.21657518900065043,
+        0.20296334449994902,
+        0.20575329900020733
+      ],
+      "speedup_x": 0.794564739878812,
+      "fallback": true
+    },
+    {
+      "workload": "mlp_bs32_d1024",
+      "iters": 1500,
+      "run_count": 3,
+      "eager_ms_per_iter": 0.10626193933421746,
+      "graph_ms_per_iter": 0.10674115866519666,
+      "eager_ms_per_iter_runs": [
+        0.10626193933421746,
+        0.10758362066796205,
+        0.10621896066732006
+      ],
+      "graph_ms_per_iter_runs": [
+        0.10652992466687768,
+        0.10690318066675293,
+        0.10674115866519666
+      ],
+      "speedup_x": 0.9955104541025049,
+      "fallback": true
+    },
+    {
+      "workload": "mlp_bs128_d2048",
+      "iters": 300,
+      "run_count": 3,
+      "eager_ms_per_iter": 0.6403489033255028,
+      "graph_ms_per_iter": 0.6404162000035285,
+      "eager_ms_per_iter_runs": [
+        0.6403489033255028,
+        0.6421439200009141,
+        0.6369884666613265
+      ],
+      "graph_ms_per_iter_runs": [
+        0.6404162000035285,
+        0.6404631666737259,
+        0.6363502833240394
+      ],
+      "speedup_x": 0.9998949172771935,
+      "fallback": true
+    }
+  ]
+}

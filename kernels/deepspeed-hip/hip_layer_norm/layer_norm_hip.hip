@@ -140,11 +140,13 @@ void launch_fused_ln(T* output,
     // For Flaoat, unRoll 4, for __half, unRoll 2
     constexpr int internal_unRoll = sizeof(T) == 4 ? 4 : 2;
 
-    const bool is_subblock_schedule = (elems_per_row <= 128) ? true : false;
-    const int h_per_step = is_subblock_schedule ? T_per_load : T_per_load * internal_unRoll;
-
     // Scheduling concern: may be slightly faster for some inputs to assign multiple stages of
     // warp-sized blocks rather than stepping up to 64/96 threads
+    const int subblock_one_step_threads =
+        next_pow2((elems_per_row + T_per_load - 1) / T_per_load);
+    const bool is_subblock_schedule =
+        elems_per_row <= 128 && subblock_one_step_threads <= 16;
+    const int h_per_step = is_subblock_schedule ? T_per_load : T_per_load * internal_unRoll;
     const int one_step_threads = next_pow2((elems_per_row + h_per_step - 1) / h_per_step);
     const int threadsPerGroup = (one_step_threads < maxThreads) ? one_step_threads : maxThreads;
 
@@ -349,11 +351,13 @@ void launch_fused_post_ln(T* output,
     // For Flaoat, unRoll 4, for __half, unRoll 2
     constexpr int internal_unRoll = sizeof(T) == 4 ? 4 : 2;
 
-    const bool is_subblock_schedule = (elems_per_row <= 128) ? true : false;
-    const int h_per_step = is_subblock_schedule ? T_per_load : T_per_load * internal_unRoll;
-
     // Scheduling concern: may be slightly faster for some inputs to assign multiple stages of
     // warp-sized blocks rather than stepping up to 64/96 threads
+    const int subblock_one_step_threads =
+        next_pow2((elems_per_row + T_per_load - 1) / T_per_load);
+    const bool is_subblock_schedule =
+        elems_per_row <= 128 && subblock_one_step_threads <= 16;
+    const int h_per_step = is_subblock_schedule ? T_per_load : T_per_load * internal_unRoll;
     const int one_step_threads = next_pow2((elems_per_row + h_per_step - 1) / h_per_step);
     const int threadsPerGroup = (one_step_threads < maxThreads) ? one_step_threads : maxThreads;
 
@@ -422,11 +426,13 @@ void launch_fused_pre_ln(T* norm_output,
     // For Flaoat, unRoll 4, for __half, unRoll 2
     constexpr int internal_unRoll = sizeof(T) == 4 ? 4 : 2;
 
-    const bool is_subblock_schedule = (elems_per_row <= 128) ? true : false;
-    const int h_per_step = is_subblock_schedule ? T_per_load : T_per_load * internal_unRoll;
-
     // Scheduling concern: may be slightly faster for some inputs to assign multiple stages of
     // warp-sized blocks rather than stepping up to 64/96 threads
+    const int subblock_one_step_threads =
+        next_pow2((elems_per_row + T_per_load - 1) / T_per_load);
+    const bool is_subblock_schedule =
+        elems_per_row <= 128 && subblock_one_step_threads <= 16;
+    const int h_per_step = is_subblock_schedule ? T_per_load : T_per_load * internal_unRoll;
     const int one_step_threads = next_pow2((elems_per_row + h_per_step - 1) / h_per_step);
     const int threadsPerGroup = (one_step_threads < maxThreads) ? one_step_threads : maxThreads;
 

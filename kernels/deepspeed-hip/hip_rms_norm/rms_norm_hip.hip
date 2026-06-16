@@ -56,7 +56,7 @@ __global__ void rms_norm(T* output, const T* vals, const T* gamma, float epsilon
 
     reduce::partitioned_block<rop::Add, threadsPerGroup>(tb, warp, var_sum);
     const float var = var_sum / elems_per_row;
-    const T denom = conversion::to<T>(__frsqrt_rn(var + epsilon));
+    const float denom = __frsqrt_rn(var + epsilon);
 
     T* block_output = output + block_offset;
 
@@ -72,8 +72,9 @@ __global__ void rms_norm(T* output, const T* vals, const T* gamma, float epsilon
 
 #pragma unroll
         for (int j = 0; j < T_per_load; j++) {
-            iteration_buffer[j] *= denom;
-            iteration_buffer[j] *= gamma_local[j];
+            float val = conversion::to<float>(iteration_buffer[j]);
+            val = val * denom * conversion::to<float>(gamma_local[j]);
+            iteration_buffer[j] = conversion::to<T>(val);
         }
 
         if (do_loads) {
@@ -139,7 +140,7 @@ __global__ void pre_rms_norm(T* output,
 
     reduce::partitioned_block<rop::Add, threadsPerGroup>(tb, warp, var_sum);
     const float var = var_sum / elems_per_row;
-    const T denom = conversion::to<T>(__frsqrt_rn(var + epsilon));
+    const float denom = __frsqrt_rn(var + epsilon);
 
     T* block_output = output + block_offset;
 
@@ -155,8 +156,9 @@ __global__ void pre_rms_norm(T* output,
 
 #pragma unroll
         for (int j = 0; j < T_per_load; j++) {
-            iteration_buffer[j] *= denom;
-            iteration_buffer[j] *= gamma_local[j];
+            float val = conversion::to<float>(iteration_buffer[j]);
+            val = val * denom * conversion::to<float>(gamma_local[j]);
+            iteration_buffer[j] = conversion::to<T>(val);
         }
 
         if (do_loads) {
@@ -196,11 +198,13 @@ void launch_rms_norm(T* norm_output,
     constexpr int maxThreads = 256;
     constexpr int internalUnroll = sizeof(T) == 4 ? 4 : 2;
 
-    const bool is_subblock_schedule = (elems_per_row <= 128) ? true : false;
-    const int h_per_step = is_subblock_schedule ? T_per_load : T_per_load * internalUnroll;
-
     // Scheduling concern: may be slightly faster for some inputs to assign multiple stages of
     // warp-sized blocks rather than stepping up to 64/96 threads
+    const int subblock_one_step_threads =
+        next_pow2((elems_per_row + T_per_load - 1) / T_per_load);
+    const bool is_subblock_schedule =
+        elems_per_row <= 128 && subblock_one_step_threads <= 16;
+    const int h_per_step = is_subblock_schedule ? T_per_load : T_per_load * internalUnroll;
     const int one_step_threads = next_pow2((elems_per_row + h_per_step - 1) / h_per_step);
     const int threads_per_group = (one_step_threads < maxThreads) ? one_step_threads : maxThreads;
 

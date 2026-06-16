@@ -166,7 +166,14 @@ hipError_t hgb_shape_pool_launch(
             input_size, pool->bucket_sizes[best], best,
             pool->bucket_sizes[best] - input_size);
 
+    uint64_t launch_start_ns = hgb_monotonic_ns();
     hipError_t err = hipGraphLaunch(pool->execs[best], stream);
+    hgb_profiler_record(
+        HGB_PROFILE_EVENT_SHAPE_LAUNCH,
+        hgb_monotonic_ns() - launch_start_ns,
+        (uint64_t)input_size,
+        (uint64_t)pool->bucket_sizes[best]
+    );
     if (err != hipSuccess) return err;
 
     err = ensure_bucket_event(pool, best);

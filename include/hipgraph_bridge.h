@@ -12,6 +12,8 @@
 #pragma once
 #include <hip/hip_runtime.h>
 #include <pthread.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -149,6 +151,64 @@ HGB_EXPORT hipError_t hgb_pipeline_update_and_launch(
     hipKernelNodeParams*  params
 );
 
+/* ── Native Telemetry ───────────────────────────────── */
+
+#define HGB_PROFILER_CAPACITY 4096
+
+typedef enum {
+    HGB_PROFILE_EVENT_UNKNOWN             = 0,
+    HGB_PROFILE_EVENT_PIPELINE_CREATE     = 1,
+    HGB_PROFILE_EVENT_PIPELINE_UPLOAD     = 2,
+    HGB_PROFILE_EVENT_PIPELINE_LAUNCH     = 3,
+    HGB_PROFILE_EVENT_PIPELINE_UPDATE     = 4,
+    HGB_PROFILE_EVENT_COMPOSE_LAUNCH      = 5,
+    HGB_PROFILE_EVENT_SHAPE_LAUNCH        = 6,
+    HGB_PROFILE_EVENT_DEVICE_CLOCK_PROBE  = 7,
+} hgb_profile_event_kind_t;
+
+typedef struct {
+    uint64_t seq;
+    uint64_t timestamp_ns;
+    uint64_t duration_ns;
+    uint64_t value0;
+    uint64_t value1;
+    uint32_t event;
+    uint32_t device_id;
+    uint32_t stream_id;
+    uint32_t flags;
+} hgb_profile_sample_t;
+
+typedef struct {
+    uint64_t written;
+    uint64_t dropped;
+    uint64_t capacity;
+} hgb_profile_counters_t;
+
+/** Monotonic host timestamp in nanoseconds, suitable for native reports. */
+HGB_EXPORT uint64_t hgb_monotonic_ns(void);
+
+/** Reset the native cyclic profiler buffer. Safe while no producer is active. */
+HGB_EXPORT void hgb_profiler_reset(void);
+
+/** Record one native event into the lock-free cyclic profiler buffer. */
+HGB_EXPORT uint64_t hgb_profiler_record(
+    uint32_t event,
+    uint64_t duration_ns,
+    uint64_t value0,
+    uint64_t value1
+);
+
+/**
+ * Copy the newest profiler samples into caller memory.
+ *
+ * Returns the number of samples copied. Samples are ordered oldest to newest.
+ */
+HGB_EXPORT size_t hgb_profiler_snapshot(
+    hgb_profile_sample_t*   out,
+    size_t                  max_samples,
+    hgb_profile_counters_t* counters
+);
+
 /* ── Gap 53: Dynamic Shape Management ───────────────── */
 
 typedef hipError_t (*hgb_capture_fn)(int size, hipGraph_t* out, void* ctx);
@@ -243,6 +303,58 @@ HGB_EXPORT hipError_t hgb_compose_launch(
 );
 
 HGB_EXPORT void hgb_compose_destroy(hgb_composed_graph_t* comp);
+
+/* ── Opaque Native Runtime Handles ──────────────────── */
+
+typedef struct hgb_pipeline_handle hgb_pipeline_handle_t;
+typedef struct hgb_composed_graph_handle hgb_composed_graph_handle_t;
+
+/**
+ * Create an opaque double-buffered pipeline handle for FFI callers.
+ *
+ * This keeps pthread/HIP struct layout out of the Rust ABI while preserving
+ * the native launch path.
+ */
+HGB_EXPORT hipError_t hgb_pipeline_handle_create(
+    hipGraph_t              graph,
+    hgb_pipeline_handle_t** out
+);
+
+HGB_EXPORT hipError_t hgb_pipeline_handle_launch(hgb_pipeline_handle_t* handle);
+
+HGB_EXPORT hipError_t hgb_pipeline_handle_update_kernel(
+    hgb_pipeline_handle_t*  handle,
+    hipGraphNode_t          node,
+    hipKernelNodeParams*    params
+);
+
+HGB_EXPORT hipError_t hgb_pipeline_handle_update_and_launch(
+    hgb_pipeline_handle_t*  handle,
+    hipGraphNode_t          node,
+    hipKernelNodeParams*    params
+);
+
+HGB_EXPORT void hgb_pipeline_handle_destroy(hgb_pipeline_handle_t* handle);
+
+HGB_EXPORT hipError_t hgb_composed_handle_create(
+    hipGraph_t*                  sub_graphs,
+    int                          count,
+    const int*                   deps,
+    hgb_composed_graph_handle_t** out
+);
+
+HGB_EXPORT hipError_t hgb_composed_handle_launch(
+    hgb_composed_graph_handle_t* handle,
+    hipStream_t                  stream
+);
+
+HGB_EXPORT hipError_t hgb_composed_handle_update_child(
+    hgb_composed_graph_handle_t* handle,
+    int                          child_index,
+    hipGraph_t                   new_sub_graph
+);
+
+HGB_EXPORT void hgb_composed_handle_destroy(hgb_composed_graph_handle_t* handle);
 
 /* ── Utilities ──────────────────────────────────────── */
 
