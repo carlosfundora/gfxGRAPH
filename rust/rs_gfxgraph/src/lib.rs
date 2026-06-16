@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::exceptions::{PyValueError, PyKeyError, PyRuntimeError, PyTypeError};
-use pyo3::types::{PyAny, PyDict};
+use pyo3::types::{PyDict, PyString};
 use std::collections::HashSet;
 use std::sync::RwLock;
 
@@ -22,27 +22,31 @@ impl BucketRouter {
         }
     }
 
-    fn route(&self, input_size: usize) -> PyResult<(i64, u8)> {
-        let bucket_val = match self.buckets.binary_search(&input_size) {
+    fn route(&self, input_size: usize) -> PyResult<(usize, u8)> {
+        let bucket = match self.buckets.binary_search(&input_size) {
             Ok(idx) => self.buckets[idx],
             Err(idx) => {
                 if idx < self.buckets.len() {
                     self.buckets[idx]
                 } else {
-                    return Ok((-1, 2));
+                    return Err(PyValueError::new_err(format!(
+                        "Input size {} exceeds largest bucket {}. Add a larger bucket.",
+                        input_size,
+                        self.buckets.last().unwrap_or(&0)
+                    )));
                 }
             }
         };
 
-        let state = if self.warmed_up.contains(&bucket_val) {
+        let state = if self.warmed_up.contains(&bucket) {
             0 // Ready
-        } else if self.failed_buckets.contains(&bucket_val) {
+        } else if self.failed_buckets.contains(&bucket) {
             2 // Failed
         } else {
             1 // NeedsWarmup
         };
 
-        Ok((bucket_val as i64, state))
+        Ok((bucket, state))
     }
 
     fn mark_warmed_up(&mut self, bucket_size: usize) {
@@ -69,11 +73,11 @@ impl BucketRouter {
 #[pyclass]
 pub struct ConditionalGraphRunner {
     branches: Vec<String>,
-    graphs: Py<PyAny>, // dict branch_name -> CUDAGraph
-    static_outputs: Py<PyAny>, // dict branch_name -> static output tensor
+    graphs: PyObject, // dict branch_name -> CUDAGraph
+    static_outputs: PyObject, // dict branch_name -> static output tensor
     failed_branches: RwLock<HashSet<String>>,
-    shared_input: Py<PyAny>, // optional shared tensor
-    branches_callbacks: Py<PyAny>, // dict branch_name -> callable fallback
+    shared_input: PyObject, // optional shared tensor
+    branches_callbacks: PyObject, // dict branch_name -> callable fallback
 }
 
 #[pymethods]
@@ -81,11 +85,11 @@ impl ConditionalGraphRunner {
     #[new]
     fn new(
         branches: Vec<String>,
-        graphs: Py<PyAny>,
-        static_outputs: Py<PyAny>,
+        graphs: PyObject,
+        static_outputs: PyObject,
         failed_branches: Vec<String>,
-        shared_input: Py<PyAny>,
-        branches_callbacks: Py<PyAny>,
+        shared_input: PyObject,
+        branches_callbacks: PyObject,
     ) -> Self {
         let mut failed = HashSet::new();
         for b in failed_branches {
@@ -105,8 +109,8 @@ impl ConditionalGraphRunner {
         &self,
         py: Python<'py>,
         branch: &str,
-        input_tensor: Option<Py<PyAny>>,
-    ) -> PyResult<Py<PyAny>> {
+        input_tensor: Option<PyObject>,
+    ) -> PyResult<PyObject> {
         if !self.branches.iter().any(|b| b == branch) {
             return Err(PyKeyError::new_err(format!(
                 "Unknown branch '{}'. Available: {:?}",
@@ -141,7 +145,8 @@ impl ConditionalGraphRunner {
             }
         }
 
-        let start = std::time::Instant::now();
+        let time_mod = py.import("time")?;
+        let t0: f64 = time_mod.call_method0("perf_counter")?.extract()?;
 
         let graphs_dict = self.graphs.downcast_bound::<PyDict>(py)
             .map_err(|_| PyRuntimeError::new_err("Invalid state: graphs must be a dict"))?;
@@ -153,17 +158,13 @@ impl ConditionalGraphRunner {
                 logger.call_method1("warning", (format!("Replay failed for branch '{}': {:?} — eager fallback", branch, e),))?;
 
                 if let Ok(mut lock) = self.failed_branches.write() {
-                    if lock.insert(branch.to_string()) {
-                        if let Ok(enable_mod) = py.import("gfxgraph._enable") {
-                            let _ = enable_mod.call_method1("bump", ("fallback_count",));
-                        }
-                    }
+                    lock.insert(branch.to_string());
                 }
                 return self.eager_fallback(py, branch, input_tensor);
             }
         }
 
-        let us = start.elapsed().as_secs_f64() * 1_000_000.0;
+        let us = (time_mod.call_method0("perf_counter")?.extract::<f64>()? - t0) * 1e6;
 
         if let Ok(enable_mod) = py.import("gfxgraph._enable") {
             let _ = enable_mod.call_method1("record_replay_us", (us,));
@@ -179,12 +180,14 @@ impl ConditionalGraphRunner {
         }
     }
 
-    fn eager_fallback<'py>(&self, py: Python<'py>, branch: &str, input_tensor: Option<Py<PyAny>>) -> PyResult<Py<PyAny>> {
+    fn eager_fallback<'py>(&self, py: Python<'py>, branch: &str, input_tensor: Option<PyObject>) -> PyResult<PyObject> {
         let callbacks_dict = self.branches_callbacks.downcast_bound::<PyDict>(py)
             .map_err(|_| PyRuntimeError::new_err("Invalid state: branches_callbacks must be a dict"))?;
         let fn_obj = callbacks_dict.get_item(branch)?.ok_or_else(|| PyRuntimeError::new_err("Branch fallback not found"))?;
 
-        // We no longer bump fallback_count here, it's structurally bumped on transition.
+        if let Ok(enable_mod) = py.import("gfxgraph._enable") {
+            let _ = enable_mod.call_method1("bump", ("fallback_count",));
+        }
 
         let torch_mod = py.import("torch")?;
         let no_grad_ctx = torch_mod.call_method0("no_grad")?;
@@ -243,10 +246,10 @@ impl BridgedGraphValidator {
     fn maybe_validate<'py>(
         &self,
         py: Python<'py>,
-        graph_output: Py<PyAny>,
-        input_tensor: Option<Py<PyAny>>,
-        model_fn: Option<Py<PyAny>>,
-    ) -> PyResult<Py<PyAny>> {
+        graph_output: PyObject,
+        input_tensor: Option<PyObject>,
+        model_fn: Option<PyObject>,
+    ) -> PyResult<PyObject> {
         if !self.validation_enabled {
             return Ok(graph_output);
         }
