@@ -521,7 +521,7 @@ to close specific parity gaps on gfx1030.
 | **aiter** | `ai/build/resources/aiter` | AMD attention + JIT hipify |
 | **Triton** | `ai/build/resources/triton` | Kernel authoring (ROCm) |
 | **kernel-learning** | `ai/build/resources/kernel-learning` | 12-chapter GPU curriculum |
-| **kernel-cache** | `ai/build/resources/kernel-cache/` | gfx1031 Triton + aiter kernels |
+| **kernel-cache** | `ai/GFX-KERNELS-HIP-PY-RS/py/frozen-jit-kernel-cache/` | gfx1030 Triton + AITER frozen JIT cache (relocated 2026-06-18) |
 | **AOTriton** | `ai/build/resources/aotriton` | Flash/SDPA attention |
 | **TheRock** | `ai/build/resources/TheRock` | ROCm build system (gfx1030 ✅) |
 
@@ -533,10 +533,11 @@ to close specific parity gaps on gfx1030.
 3. **Verify on gfx1030**: `hipcc --offload-arch=gfx1030 hip_kernel.hip`
 4. **Optimize with Triton** (optional): Rewrite for portability and
    auto-tuning via `ai/build/resources/triton`
-5. **Cache**: Store compiled kernels in `kernel-cache/` for reuse
+5. **Cache**: Store compiled kernels in `GFX-KERNELS-HIP-PY-RS/py/frozen-jit-kernel-cache/` for reuse
 
-For Triton kernels targeting RDNA2, reference the 298 cached
-compilations in `kernel-cache/triton-gfx1031/` as starting patterns.
+For Triton kernels targeting RDNA2, reference the 296 cached compilations (258 kernel
+variants + 38 runtime) in `GFX-KERNELS-HIP-PY-RS/py/frozen-jit-kernel-cache/triton-gfx1031/`
+as starting patterns.
 
 </details>
 
