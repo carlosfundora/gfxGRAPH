@@ -1,11 +1,51 @@
 """Runtime guardrails for high-level PyTorch graph capture."""
 
+import contextlib
 import os
 import subprocess
 import sys
 from functools import lru_cache
 
 import torch
+
+try:
+    import rs_gfxgraph as _rs_gfxgraph
+except Exception:
+    _rs_gfxgraph = None
+
+# Process-global hipGraph capture serialization lives in Rust
+# (rs_gfxgraph_core::capture_gate). On gfx1030/RDNA2, HIP capture bookkeeping is
+# process-global, so two in-process LLM sessions capturing at once corrupt each
+# other. These thin wrappers serialize capture across sessions while leaving
+# replay concurrent; when the native extension is absent (pure-Python install)
+# they degrade to a no-op, matching the rest of the optional-native pattern.
+_HAS_CAPTURE_GATE = _rs_gfxgraph is not None and hasattr(_rs_gfxgraph, "CaptureLock")
+
+
+def capture_lock():
+    """Return the process-global capture lock (exclusive) as a context manager."""
+    if _HAS_CAPTURE_GATE:
+        return _rs_gfxgraph.CaptureLock()
+    return contextlib.nullcontext()
+
+
+def replay_lock():
+    """Return the shared replay lock as a context manager (excluded during capture)."""
+    if _HAS_CAPTURE_GATE:
+        return _rs_gfxgraph.ReplayLock()
+    return contextlib.nullcontext()
+
+
+def acquire_capture_lock():
+    """Acquire the capture lock for the begin/end API (spans two calls)."""
+    if _HAS_CAPTURE_GATE:
+        _rs_gfxgraph.acquire_capture_lock()
+
+
+def release_capture_lock():
+    """Release the lock taken by :func:`acquire_capture_lock`."""
+    if _HAS_CAPTURE_GATE:
+        _rs_gfxgraph.release_capture_lock()
 
 
 @lru_cache(maxsize=1)

@@ -80,6 +80,18 @@ gfxgraph.torch_rocm_status()  # {is_rocm, torch_version, hip_version, message}
 gfxgraph.should_convert(block_threads, grid_blocks)  # (apply, reason) — collision-safe gate
 ```
 
+## Concurrent multi-session (two LLMs in one process)
+
+On gfx1030/RDNA2, HIP stream-capture bookkeeping is **process-global** even with
+`hipStreamCaptureModeThreadLocal` — so if two in-process sessions capture graphs at the
+same time, output can come back as NaN. That's a ROCm-runtime limitation, not a gfxGRAPH
+bug. gfxGRAPH handles it transparently: capture is **serialized process-wide** by a Rust
+lock (`CaptureLock`, write-exclusive), while replay stays **fully concurrent**
+(`ReplayLock`, shared). Both models capture their graphs — just never simultaneously — and
+replay in parallel, so you keep high-level capture for every session with **no code
+changes**. The lock releases the GIL while waiting and no-ops on pure-Python (Tier 1)
+installs.
+
 ## CLI (`gfxgraph …`)
 
 The diagnostics are framework-agnostic, so the CLI helps users of **any** engine:

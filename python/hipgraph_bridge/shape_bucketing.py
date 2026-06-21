@@ -28,6 +28,8 @@ from typing import Callable, List, Optional, Tuple
 import torch
 
 from hipgraph_bridge.capture_safety import (
+    capture_lock,
+    replay_lock,
     torch_graph_capture_block_reason,
     torch_cuda_execution_error,
     torch_cuda_execution_usable,
@@ -219,18 +221,24 @@ class ShapeBucketPool:
             else:
                 static_input = self._static_inputs[bucket_size]
 
-            # Warmup run (required before capture)
-            torch.cuda.synchronize()
-            with torch.no_grad():
-                _ = self.model_fn(static_input)
-            torch.cuda.synchronize()
+            # Serialize capture process-wide: each bucket is its own hipGraph,
+            # and concurrent capture from a second in-process session corrupts
+            # output on gfx1030. The lock spans warmup + capture (one-time/lazy),
+            # then is released before the replay below — no nesting with the
+            # shared replay lock.
+            with capture_lock():
+                # Warmup run (required before capture)
+                torch.cuda.synchronize()
+                with torch.no_grad():
+                    _ = self.model_fn(static_input)
+                torch.cuda.synchronize()
 
-            # Capture
-            graph = torch.cuda.CUDAGraph()
-            pool = torch.cuda.graph_pool_handle()
-            self._graph_pools[bucket_size] = pool
-            with torch.cuda.graph(graph, pool=pool):
-                static_output = self.model_fn(static_input)
+                # Capture
+                graph = torch.cuda.CUDAGraph()
+                pool = torch.cuda.graph_pool_handle()
+                self._graph_pools[bucket_size] = pool
+                with torch.cuda.graph(graph, pool=pool):
+                    static_output = self.model_fn(static_input)
 
             self._graphs[bucket_size] = graph
             self._static_outputs[bucket_size] = static_output
@@ -320,8 +328,10 @@ class ShapeBucketPool:
             if input_size < bucket:
                 static_in[input_size:].zero_()  # Zero-pad
 
-        # Replay
-        self._graphs[bucket].replay()
+        # Replay (shared lock; the lazy capture above already released the
+        # exclusive lock, so there is no self-deadlock).
+        with replay_lock():
+            self._graphs[bucket].replay()
 
         return self._materialize_output(bucket, input_size)
 

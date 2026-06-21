@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.1.0] - 2026-06-21
+
+### Fixed
+- **Concurrent multi-session graph capture corruption on gfx1030/RDNA2**: when two
+  in-process LLM sessions captured CUDA/HIP graphs at the same time, output could come
+  back as NaN. Root cause is in the ROCm runtime, not gfxGRAPH: HIP stream-capture
+  bookkeeping is **process-global** even with `hipStreamCaptureModeThreadLocal`, so
+  concurrent captures clobber each other. gfxGRAPH now serializes capture process-wide
+  with a single Rust reader/writer gate (`rs_gfxgraph_core::capture_gate`, exposed as
+  `rs_gfxgraph.CaptureLock` / `ReplayLock`): **capture takes the write lock (one at a
+  time, excludes in-flight replay); replay takes the shared read lock (fully concurrent
+  across sessions).** Both LLMs still capture their graphs — just never simultaneously —
+  and replay stays parallel, so the high-level-capture value proposition is preserved.
+  The lock is acquired with the GIL released to avoid deadlock, and degrades to a no-op
+  when the native extension is absent (pure-Python install). Every capture site
+  (`capture_begin`/`capture_end`, the standard capture context, shape-bucket lazy capture,
+  and conditional-branch capture) is serialized; replay sites take the shared lock.
+
 ## [rust-hip-cpp] - 2026-06-16
 
 ### Added

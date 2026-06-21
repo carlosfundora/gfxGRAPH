@@ -17,6 +17,9 @@ import time
 import torch
 
 from hipgraph_bridge.capture_safety import (
+    acquire_capture_lock,
+    release_capture_lock,
+    replay_lock,
     torch_graph_capture_block_reason,
     torch_cuda_execution_error,
     torch_cuda_execution_usable,
@@ -156,12 +159,23 @@ class BridgedCUDAGraph:
             raise RuntimeError(torch_graph_capture_block_reason())
         if self._graph is None:
             self._graph = _OriginalCUDAGraph()
-        self._graph.capture_begin(*args, **kwargs)
+        # Serialize capture process-wide: on gfx1030/RDNA2, two in-process LLM
+        # sessions capturing at once corrupt each other. Held until capture_end();
+        # released here if capture_begin itself fails so the lock never leaks.
+        acquire_capture_lock()
+        try:
+            self._graph.capture_begin(*args, **kwargs)
+        except Exception:
+            release_capture_lock()
+            raise
 
     def capture_end(self):
         """End graph capture — delegates to real CUDAGraph."""
         if self._graph is not None:
-            self._graph.capture_end()
+            try:
+                self._graph.capture_end()
+            finally:
+                release_capture_lock()
             _bump_capture()
 
     def pool(self):
@@ -176,6 +190,9 @@ class BridgedCUDAGraph:
             self.dynamic_shapes = dynamic_shapes
             self.buckets = buckets
             self.conditional_branches = conditional_branches
+            # True while this context holds the process-global capture lock
+            # (standard capture path only; deferred bucketing locks per-bucket).
+            self._capture_lock_held = False
 
         def __enter__(self):
             self.parent._stream = torch.cuda.Stream()
@@ -193,6 +210,10 @@ class BridgedCUDAGraph:
             try:
                 if not unsafe_torch_graph_capture_enabled():
                     raise RuntimeError(torch_graph_capture_block_reason())
+                # Serialize capture across in-process sessions (gfx1030 fix).
+                # Released in __exit__, or below if this enter fails.
+                acquire_capture_lock()
+                self._capture_lock_held = True
                 self.parent._graph = _OriginalCUDAGraph()
                 torch.cuda.synchronize()
                 self.parent._capture_ctx = torch.cuda.graph(
@@ -206,6 +227,9 @@ class BridgedCUDAGraph:
                     torch.cuda.synchronize()
                 except Exception:
                     pass
+                if self._capture_lock_held:
+                    release_capture_lock()
+                    self._capture_lock_held = False
                 self.parent._capture_ctx = None
                 self.parent._graph = None
                 self.parent._eager_fallback = True
@@ -252,6 +276,9 @@ class BridgedCUDAGraph:
                     torch.cuda.synchronize()
                 except Exception:
                     pass
+                if self._capture_lock_held:
+                    release_capture_lock()
+                    self._capture_lock_held = False
                 return True  # suppress the exception
 
             if self.parent._graph is not None:
@@ -273,6 +300,9 @@ class BridgedCUDAGraph:
                     self.parent._graph = None
                     self.parent._eager_fallback = True
                     _bump_fallback()
+            if self._capture_lock_held:
+                release_capture_lock()
+                self._capture_lock_held = False
             return False
 
     def capture(self, *, dynamic_shapes=False, buckets=None,
@@ -344,10 +374,12 @@ class BridgedCUDAGraph:
                 self._record_replay_sample(t0)
             return self._maybe_validate(result, input_tensor)
 
-        # Standard graph replay
+        # Standard graph replay (shared replay lock: concurrent replays are
+        # fine; excluded only during another session's one-time capture).
         if self._graph is not None:
             if _HOT_REPLAY_MODE:
-                self._graph.replay()
+                with replay_lock():
+                    self._graph.replay()
                 return self._static_output
             sample_diagnostics = True
             if _TRUSTED_REPLAY_THRESHOLD > 0 and self._trusted_replay_active:
@@ -356,7 +388,8 @@ class BridgedCUDAGraph:
                 torch.cuda.synchronize()
             t0 = time.perf_counter() if sample_diagnostics else 0.0
             try:
-                self._graph.replay()
+                with replay_lock():
+                    self._graph.replay()
             except Exception as e:
                 # GUARD tier 2: turn an opaque illegal-access into a precise,
                 # localized report (op + tensor layouts) before falling back.

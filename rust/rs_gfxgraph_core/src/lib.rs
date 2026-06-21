@@ -2,6 +2,7 @@ pub mod settings;
 pub use settings::CrateSettings;
 
 pub mod adapter;
+pub mod capture_gate;
 pub mod convert;
 pub mod error;
 pub mod geometry;
@@ -17,6 +18,7 @@ pub mod validator;
 pub mod wave;
 
 pub use adapter::GfxGraphAdapterKind;
+pub use capture_gate::{lock_capture, lock_replay, unlock_capture, unlock_replay};
 pub use convert::{
     DTypeConversionContract, DTypeKind, PageTransform, ShapeLayoutConversionPlan, StrideTransform,
 };

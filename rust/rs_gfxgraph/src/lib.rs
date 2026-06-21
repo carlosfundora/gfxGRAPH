@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 use pyo3::exceptions::{PyValueError, PyKeyError, PyRuntimeError, PyTypeError};
 use pyo3::types::PyDict;
+use rs_gfxgraph_core::capture_gate;
 use std::collections::HashSet;
 use std::sync::RwLock;
 use std::sync::OnceLock;
@@ -420,6 +421,99 @@ impl ConditionalGraphRunner {
     }
 }
 
+/// Context manager that serializes hipGraph capture process-wide.
+///
+/// On gfx1030/RDNA2 under ROCm, two in-process LLM sessions that capture graphs
+/// at the same time corrupt each other's output (HIP capture bookkeeping is
+/// process-global). Wrapping a capture in `with rs_gfxgraph.CaptureLock():`
+/// guarantees one capture at a time across every session, while replay stays
+/// concurrent. Acquisition releases the GIL so a thread blocked here cannot
+/// deadlock the thread that holds the lock.
+#[pyclass]
+struct CaptureLock {
+    held: bool,
+}
+
+#[pymethods]
+impl CaptureLock {
+    #[new]
+    fn new() -> Self {
+        CaptureLock { held: false }
+    }
+
+    fn __enter__(mut slf: PyRefMut<'_, Self>, py: Python<'_>) -> PyResult<()> {
+        // Release the GIL while blocking on the exclusive lock.
+        py.allow_threads(capture_gate::lock_capture);
+        slf.held = true;
+        Ok(())
+    }
+
+    fn __exit__(
+        mut slf: PyRefMut<'_, Self>,
+        _exc_type: PyObject,
+        _exc_value: PyObject,
+        _traceback: PyObject,
+    ) -> PyResult<bool> {
+        if slf.held {
+            capture_gate::unlock_capture();
+            slf.held = false;
+        }
+        Ok(false) // never suppress exceptions raised inside the `with` block
+    }
+}
+
+/// Context manager for a shared (concurrent) graph replay.
+///
+/// Multiple replays may proceed at once; they are excluded only while a
+/// `CaptureLock` holds the gate (i.e. during the brief one-time capture
+/// window). Replay is the hot path, so this is a single uncontended atomic.
+#[pyclass]
+struct ReplayLock {
+    held: bool,
+}
+
+#[pymethods]
+impl ReplayLock {
+    #[new]
+    fn new() -> Self {
+        ReplayLock { held: false }
+    }
+
+    fn __enter__(mut slf: PyRefMut<'_, Self>, py: Python<'_>) -> PyResult<()> {
+        py.allow_threads(capture_gate::lock_replay);
+        slf.held = true;
+        Ok(())
+    }
+
+    fn __exit__(
+        mut slf: PyRefMut<'_, Self>,
+        _exc_type: PyObject,
+        _exc_value: PyObject,
+        _traceback: PyObject,
+    ) -> PyResult<bool> {
+        if slf.held {
+            capture_gate::unlock_replay();
+            slf.held = false;
+        }
+        Ok(false)
+    }
+}
+
+/// Acquire the process-global capture lock for the begin/end capture API
+/// (`BridgedCUDAGraph.capture_begin`/`capture_end`, the SGLang/vLLM drop-in
+/// path) which spans two calls and cannot use a context manager. Releases the
+/// GIL while blocking. Pair exactly once with [`release_capture_lock`].
+#[pyfunction]
+fn acquire_capture_lock(py: Python<'_>) {
+    py.allow_threads(capture_gate::lock_capture);
+}
+
+/// Release the process-global capture lock acquired by [`acquire_capture_lock`].
+#[pyfunction]
+fn release_capture_lock() {
+    capture_gate::unlock_capture();
+}
+
 /// Exposes the compiled Rust components as a python module.
 #[pymodule]
 fn rs_gfxgraph(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -429,12 +523,18 @@ fn rs_gfxgraph(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BucketRouter>()?;
     m.add_class::<ConditionalGraphRunner>()?;
     m.add_class::<BridgedGraphValidator>()?;
-    
+    m.add_class::<CaptureLock>()?;
+    m.add_class::<ReplayLock>()?;
+
     // Register system info functions
     m.add_function(wrap_pyfunction!(pinned_cpu_cores, m)?)?;
     m.add_function(wrap_pyfunction!(hsa_override_applied, m)?)?;
     m.add_function(wrap_pyfunction!(init_status_message, m)?)?;
-    
+
+    // Process-global hipGraph capture serialization (begin/end API).
+    m.add_function(wrap_pyfunction!(acquire_capture_lock, m)?)?;
+    m.add_function(wrap_pyfunction!(release_capture_lock, m)?)?;
+
     Ok(())
 }
 

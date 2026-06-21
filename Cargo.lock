@@ -2344,6 +2344,7 @@ dependencies = [
  "libc",
  "maturin",
  "pyo3",
+ "rs_gfxgraph_core",
 ]
 
 [[package]]
