@@ -4,7 +4,32 @@ This guide details the benchmarking suite, script configurations, output formats
 
 ---
 
-## 1. Micro-Benchmarks
+## 1. Native-Only Gate
+
+The `rust-hip-cpp` branch must prove the native runtime path without importing the
+Python package. Use this gate before changing runtime behavior:
+
+```bash
+cargo build -p rs_gfxgraph_native --bin gfxgraph-native-probe
+cargo run -p rs_gfxgraph_bench -- \
+  --repo-root . \
+  --phase clean-candidate \
+  --native-only \
+  --run-id native-only-runtime-YYYYMMDD
+```
+
+This writes a schema-validated report under `benchmarks/results/YYYY-MM-DD/` with
+`python: null`, `target_import_policy: native-only`, and a
+`rust-native-runtime-cli` benchmark produced by `gfxgraph-native-probe`. The probe
+loads `libhipgraph_bridge.so` directly, exercises lifecycle and profiler FFI, and
+reports `python_used: false`.
+
+Python package install/uninstall is only for compatibility baselines against the
+published package. It is not the development target for this branch.
+
+---
+
+## 2. Micro-Benchmarks
 
 Micro-benchmarks isolate specific components to compare the performance between the pure Python fallback logic and the PyO3 Rust extension modules.
 
@@ -30,7 +55,7 @@ Micro-benchmarks isolate specific components to compare the performance between 
 
 ---
 
-## 2. Public GPU Benchmarks
+## 3. Public GPU Benchmarks
 
 The public benchmark suite is intended to run on a real GPU to verify overall latency and throughput improvements.
 
@@ -47,7 +72,7 @@ The public benchmark suite is intended to run on a real GPU to verify overall la
 
 ---
 
-## 3. Output JSON Schema & Provenance
+## 4. Output JSON Schema & Provenance
 
 When running the public benchmark, results are saved to a JSON file containing provenance tracking metadata:
 
@@ -72,7 +97,7 @@ When running the public benchmark, results are saved to a JSON file containing p
 
 ---
 
-## 4. Targets and Performance Gates
+## 5. Targets and Performance Gates
 
 | Benchmark Component | Baseline Reference | Target Performance |
 |---------------------|--------------------|--------------------|

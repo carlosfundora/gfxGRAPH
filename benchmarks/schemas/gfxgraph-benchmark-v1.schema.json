@@ -130,7 +130,8 @@
           "enum": [
             "site-packages",
             "repo",
-            "not-enforced"
+            "not-enforced",
+            "native-only"
           ]
         },
         "graph_enabled": {

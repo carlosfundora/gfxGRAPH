@@ -55,6 +55,9 @@ struct Cli {
     #[arg(long)]
     skip_hip: bool,
 
+    #[arg(long)]
+    native_only: bool,
+
     #[arg(long, default_value_t = 3)]
     public_run_count: u32,
 
@@ -267,7 +270,20 @@ fn run_phase(
     let mut benchmarks = Vec::new();
     let phase_env = phase_env(phase);
 
-    if phase.candidate() && !cli.allow_package_changes {
+    let mut python_probe = None;
+
+    if cli.native_only {
+        gate_checks.push(GateCheck {
+            name: "native-runtime-only".to_string(),
+            status: "passed",
+            message: "native-only gate skips Python package transition and import provenance"
+                .to_string(),
+            details: json!({
+                "phase": phase.as_str(),
+                "python": Value::Null,
+            }),
+        });
+    } else if phase.candidate() && !cli.allow_package_changes {
         gate_checks.push(GateCheck {
             name: "candidate-package-transition".to_string(),
             status: "skipped",
@@ -288,21 +304,38 @@ fn run_phase(
         gate_checks.push(check_candidate_package_actions(&package_actions));
     }
 
-    let (python_probe, python_command) = collect_python_provenance(python, repo_root, &phase_env);
-    benchmarks.push(command_as_benchmark(
-        "python-import-provenance",
-        "package-provenance",
-        python_command,
-    ));
-    gate_checks.push(check_python_import_policy(
-        phase,
-        repo_root,
-        python_probe.as_ref(),
-        effective_import_enforcement,
-    ));
+    if cli.native_only {
+        benchmarks.push(skipped_benchmark(
+            "python-import-provenance",
+            "package-provenance",
+            "skipped by --native-only",
+        ));
+    } else {
+        let (probe, python_command) = collect_python_provenance(python, repo_root, &phase_env);
+        python_probe = probe;
+        benchmarks.push(command_as_benchmark(
+            "python-import-provenance",
+            "package-provenance",
+            python_command,
+        ));
+        gate_checks.push(check_python_import_policy(
+            phase,
+            repo_root,
+            python_probe.as_ref(),
+            effective_import_enforcement,
+        ));
+    }
 
-    if !phase.candidate() || cli.allow_package_changes {
-        benchmarks.push(run_capture_policy_probe(repo_root, python, &phase_env));
+    if !phase.candidate() || cli.allow_package_changes || cli.native_only {
+        if cli.native_only {
+            benchmarks.push(skipped_benchmark(
+                "torch-capture-policy",
+                "capture-policy",
+                "skipped by --native-only",
+            ));
+        } else {
+            benchmarks.push(run_capture_policy_probe(repo_root, python, &phase_env));
+        }
         benchmarks.push(bench_rust_router(cli.rust_iterations));
         benchmarks.push(bench_rust_stats(cli.rust_iterations));
 
@@ -318,12 +351,19 @@ fn run_phase(
                 "skipped by --skip-hip",
             ));
         } else {
+            benchmarks.push(run_native_runtime_cli(repo_root));
             benchmarks.push(run_native_runtime_ffi(repo_root));
             benchmarks.push(run_hip_benchmark(repo_root));
             benchmarks.push(run_ctest(repo_root));
         }
 
-        if cli.skip_public {
+        if cli.native_only {
+            benchmarks.push(skipped_benchmark(
+                "readme-public-benchmark",
+                "python-public",
+                "skipped by --native-only",
+            ));
+        } else if cli.skip_public {
             benchmarks.push(skipped_benchmark(
                 "readme-public-benchmark",
                 "python-public",
@@ -351,7 +391,13 @@ fn run_phase(
             benchmarks.push(public_benchmark_record(public_record));
         }
 
-        if cli.skip_python_micro || !cli.include_python_micro {
+        if cli.native_only {
+            benchmarks.push(skipped_benchmark(
+                "legacy-python-microbenchmarks",
+                "python-micro",
+                "skipped by --native-only",
+            ));
+        } else if cli.skip_python_micro || !cli.include_python_micro {
             benchmarks.push(skipped_benchmark(
                 "legacy-python-microbenchmarks",
                 "python-micro",
@@ -389,7 +435,11 @@ fn run_phase(
         environment: environment_provenance(),
         python: python_probe,
         package_state: PackageState {
-            target_import_policy: phase.target_import_policy(effective_import_enforcement),
+            target_import_policy: if cli.native_only {
+                "native-only"
+            } else {
+                phase.target_import_policy(effective_import_enforcement)
+            },
             graph_enabled: phase.graph_enabled(),
             allow_package_changes: cli.allow_package_changes,
             package_actions,
@@ -934,6 +984,76 @@ fn run_native_runtime_ffi(repo_root: &Path) -> BenchmarkRecord {
             metrics: BTreeMap::from([("candidates".to_string(), json!(path_strings(&candidates)))]),
         },
     }
+}
+
+fn run_native_runtime_cli(repo_root: &Path) -> BenchmarkRecord {
+    let probe_args = vec![
+        "--repo-root".to_string(),
+        repo_root.display().to_string(),
+        "--event-count".to_string(),
+        "3".to_string(),
+        "--sample-count".to_string(),
+        "8".to_string(),
+    ];
+    let release_probe = repo_root.join("target/release/gfxgraph-native-probe");
+    let debug_probe = repo_root.join("target/debug/gfxgraph-native-probe");
+    let record = if release_probe.exists() {
+        run_command(
+            "rust-native-runtime-cli",
+            &release_probe.display().to_string(),
+            &probe_args,
+            Some(repo_root),
+            &[],
+        )
+    } else if debug_probe.exists() {
+        run_command(
+            "rust-native-runtime-cli",
+            &debug_probe.display().to_string(),
+            &probe_args,
+            Some(repo_root),
+            &[],
+        )
+    } else {
+        let mut cargo_args = vec![
+            "run".to_string(),
+            "--quiet".to_string(),
+            "-p".to_string(),
+            "rs_gfxgraph_native".to_string(),
+            "--bin".to_string(),
+            "gfxgraph-native-probe".to_string(),
+            "--".to_string(),
+        ];
+        cargo_args.extend(probe_args);
+        run_command(
+            "rust-native-runtime-cli",
+            "cargo",
+            &cargo_args,
+            Some(repo_root),
+            &[],
+        )
+    };
+    let mut benchmark = command_as_benchmark("rust-native-runtime-cli", "rust-native", record);
+    if let Ok(payload) = serde_json::from_str::<Value>(benchmark.stdout_tail.trim()) {
+        benchmark
+            .metrics
+            .insert("payload".to_string(), payload.clone());
+        for key in [
+            "python_used",
+            "init_ok",
+            "initialized",
+            "library_path",
+            "native_contracts",
+            "event_count",
+            "snapshot_sample_count",
+            "profiler_counters",
+            "version",
+        ] {
+            if let Some(value) = payload.get(key) {
+                benchmark.metrics.insert(key.to_string(), value.clone());
+            }
+        }
+    }
+    benchmark
 }
 
 fn run_hip_benchmark(repo_root: &Path) -> BenchmarkRecord {
