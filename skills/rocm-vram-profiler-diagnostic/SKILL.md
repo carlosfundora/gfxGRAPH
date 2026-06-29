@@ -44,10 +44,12 @@ If generation length causes failure, you must limit the context windows. Memory 
 
 **In SGLang Launch Strings:**
 ```bash
-python3 -m sglang.launch_server \
+SGLANG_USE_AITER=1 python3 -m sglang.launch_server \
   --model meta-llama/Llama-3-8B-Instruct \
   --dtype float16 \
-  --attention-backend triton \ # Aiter does NOT work on RDNA2!
+  # backend unforced — native AITER attention works on patched gfx1030 (SGLANG_USE_AITER=1);
+  # the old "Aiter does NOT work on RDNA2" claim was false. Keep cuda-graph on triton until the
+  # aiter+hgb_decode_pool capture lane is wired.
   --mem-fraction-static 0.8 \
   --context-length 4096 \
   --host 0.0.0.0 \
