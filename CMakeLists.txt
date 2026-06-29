@@ -22,6 +22,7 @@ add_library(hipgraph_bridge SHARED
     src/conditional_bridge.hip
     src/launch_pipeline.hip
     src/shape_manager.hip
+    src/decode_pool.hip
     src/capture_compositor.hip
     src/graph_utils.hip
 )
@@ -87,7 +88,7 @@ option(BUILD_TESTS "Build test executables" ON)
 if(BUILD_TESTS)
     enable_testing()
 
-    foreach(gap IN ITEMS conditional pipeline shapes compositor routing)
+    foreach(gap IN ITEMS conditional pipeline shapes compositor routing decode)
         add_executable(test_${gap} tests/test_${gap}.hip)
         target_link_libraries(test_${gap} PRIVATE hipgraph_bridge)
         add_test(NAME ${gap} COMMAND test_${gap})

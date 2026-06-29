@@ -262,6 +262,79 @@ HGB_EXPORT hipError_t hgb_shape_pool_update_params(
 
 HGB_EXPORT void hgb_shape_pool_destroy(hgb_shape_pool_t* pool);
 
+/* ── Capture-safe paged decode ──────────────────────────
+ *
+ * Fixes decode-attention-under-hipGraph replay-data-unsafety: a captured decode graph that bakes the
+ * per-step sequence length / block table BY VALUE garbles when replayed as the sequence grows (each
+ * replay attends the capture-time length). This pool owns PERSISTENT device metadata buffers at fixed
+ * addresses; the captured graph reads them, and replay = memcpy(live -> persistent) + hipGraphLaunch.
+ * No hipGraphExec*SetParams — the kernel-node pointer args never change, only the buffer CONTENTS, so
+ * the captured node reads fresh data. One graph per bucket (bucket-constant max) replays correctly for
+ * every decode step. (Wires the previously-vestigial hgb_shape_pool_t::static_bufs slot, the right way.)
+ */
+
+/**
+ * Capture callback for decode. Build a graph for `bucket_max` whose decode kernel reads the supplied
+ * PERSISTENT device metadata buffers — d_seq_lens[max_num_seqs] and
+ * d_block_tables[max_num_seqs * max_blocks_per_seq]. The SAME buffers are passed for every bucket, so a
+ * single in-place refresh before launch updates whichever bucket's graph runs. Sizing args (head/page
+ * geometry, kernel pointers) ride in `ctx`.
+ */
+typedef hipError_t (*hgb_decode_capture_fn)(
+    int         bucket_max,
+    const int*  d_seq_lens,
+    const int*  d_block_tables,
+    hipGraph_t* out,
+    void*       ctx
+);
+
+typedef struct {
+    int*             bucket_sizes;
+    int              num_buckets;
+    hipGraphExec_t*  execs;
+    hipGraph_t*      graphs;
+    hipEvent_t*      events;            /**< Per-bucket event for in-flight tracking */
+    int*             d_seq_lens;        /**< persistent device int[max_num_seqs] */
+    int*             d_block_tables;    /**< persistent device int[max_num_seqs*max_blocks_per_seq] */
+    int              max_num_seqs;
+    int              max_blocks_per_seq;
+    int              device_id;
+    pthread_mutex_t  lock;
+} hgb_decode_pool_t;
+
+/**
+ * Create a capture-safe decode pool: allocate the persistent metadata buffers, then capture one graph
+ * per bucket via `fn` (each reading those buffers) and instantiate it. `buckets` = ascending per-bucket
+ * max sequence lengths.
+ */
+HGB_EXPORT hipError_t hgb_decode_pool_create(
+    hgb_decode_capture_fn fn,
+    void*                 ctx,
+    const int*            buckets,
+    int                   num_buckets,
+    int                   max_num_seqs,
+    int                   max_blocks_per_seq,
+    hgb_decode_pool_t*    out
+);
+
+/**
+ * Refresh the persistent metadata in place from host arrays, then launch the smallest bucket >=
+ * input_size. `h_seq_lens` is int[num_seqs]; `h_block_tables` is int[num_seqs*max_blocks_per_seq]
+ * (may be NULL to skip the block-table copy). The memcpy is enqueued on `stream` before the launch, so
+ * the replay sees the fresh metadata. Returns the actual bucket used in `actual_bucket`.
+ */
+HGB_EXPORT hipError_t hgb_decode_pool_replay(
+    hgb_decode_pool_t* pool,
+    int                input_size,
+    const int*         h_seq_lens,
+    int                num_seqs,
+    const int*         h_block_tables,
+    hipStream_t        stream,
+    int*               actual_bucket
+);
+
+HGB_EXPORT void hgb_decode_pool_destroy(hgb_decode_pool_t* pool);
+
 /* ── Gap 54: Capture Compositor ─────────────────────── */
 
 typedef struct {
