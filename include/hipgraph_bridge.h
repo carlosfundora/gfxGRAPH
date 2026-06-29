@@ -381,6 +381,7 @@ HGB_EXPORT void hgb_compose_destroy(hgb_composed_graph_t* comp);
 
 typedef struct hgb_pipeline_handle hgb_pipeline_handle_t;
 typedef struct hgb_composed_graph_handle hgb_composed_graph_handle_t;
+typedef struct hgb_decode_pool_handle hgb_decode_pool_handle_t;
 
 /**
  * Create an opaque double-buffered pipeline handle for FFI callers.
@@ -428,6 +429,29 @@ HGB_EXPORT hipError_t hgb_composed_handle_update_child(
 );
 
 HGB_EXPORT void hgb_composed_handle_destroy(hgb_composed_graph_handle_t* handle);
+
+/* Capture-safe decode pool (opaque handle over hgb_decode_pool_*). */
+HGB_EXPORT hipError_t hgb_decode_pool_handle_create(
+    hgb_decode_capture_fn      fn,
+    void*                      ctx,
+    const int*                 buckets,
+    int                        num_buckets,
+    int                        max_num_seqs,
+    int                        max_blocks_per_seq,
+    hgb_decode_pool_handle_t** out
+);
+
+HGB_EXPORT hipError_t hgb_decode_pool_handle_replay(
+    hgb_decode_pool_handle_t* handle,
+    int                       input_size,
+    const int*                h_seq_lens,
+    int                       num_seqs,
+    const int*                h_block_tables,
+    hipStream_t               stream,
+    int*                      actual_bucket
+);
+
+HGB_EXPORT void hgb_decode_pool_handle_destroy(hgb_decode_pool_handle_t* handle);
 
 /* ── Utilities ──────────────────────────────────────── */
 

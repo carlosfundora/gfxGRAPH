@@ -138,6 +138,32 @@ type HgbComposedHandleLaunch = unsafe extern "C" fn(*mut c_void, *mut c_void) ->
 type HgbComposedHandleUpdateChild = unsafe extern "C" fn(*mut c_void, c_int, *mut c_void) -> c_int;
 type HgbComposedHandleDestroy = unsafe extern "C" fn(*mut c_void);
 
+/// Capture callback for the capture-safe decode pool:
+/// `(bucket_max, d_seq_lens, d_block_tables, *out_graph, ctx) -> hipError_t`. The graph it captures
+/// must read the supplied PERSISTENT `d_seq_lens`/`d_block_tables` device buffers (so replay refreshes
+/// them in place rather than baking the sequence length by value).
+pub type HgbDecodeCaptureFn =
+    unsafe extern "C" fn(c_int, *const c_int, *const c_int, *mut *mut c_void, *mut c_void) -> c_int;
+type HgbDecodePoolHandleCreate = unsafe extern "C" fn(
+    Option<HgbDecodeCaptureFn>,
+    *mut c_void,
+    *const c_int,
+    c_int,
+    c_int,
+    c_int,
+    *mut *mut c_void,
+) -> c_int;
+type HgbDecodePoolHandleReplay = unsafe extern "C" fn(
+    *mut c_void,
+    c_int,
+    *const c_int,
+    c_int,
+    *const c_int,
+    *mut c_void,
+    *mut c_int,
+) -> c_int;
+type HgbDecodePoolHandleDestroy = unsafe extern "C" fn(*mut c_void);
+
 #[derive(Clone, Copy)]
 struct NativeApi {
     init: HgbInit,
@@ -156,6 +182,9 @@ struct NativeApi {
     composed_handle_launch: HgbComposedHandleLaunch,
     composed_handle_update_child: HgbComposedHandleUpdateChild,
     composed_handle_destroy: HgbComposedHandleDestroy,
+    decode_pool_handle_create: HgbDecodePoolHandleCreate,
+    decode_pool_handle_replay: HgbDecodePoolHandleReplay,
+    decode_pool_handle_destroy: HgbDecodePoolHandleDestroy,
 }
 
 pub struct NativeBridge {
@@ -213,6 +242,9 @@ impl NativeBridge {
                     "hgb_composed_handle_update_child",
                 )?,
                 composed_handle_destroy: load_symbol(handle, "hgb_composed_handle_destroy")?,
+                decode_pool_handle_create: load_symbol(handle, "hgb_decode_pool_handle_create")?,
+                decode_pool_handle_replay: load_symbol(handle, "hgb_decode_pool_handle_replay")?,
+                decode_pool_handle_destroy: load_symbol(handle, "hgb_decode_pool_handle_destroy")?,
             }
         };
 
@@ -337,6 +369,47 @@ impl NativeBridge {
             handle,
         })
     }
+
+    /// Create a capture-safe decode pool. `capture_fn` (signature [`HgbDecodeCaptureFn`]) captures a
+    /// graph for each bucket that reads the pool's PERSISTENT `d_seq_lens`/`d_block_tables` device
+    /// buffers; `ctx` is passed through to it. `buckets` = ascending per-bucket max sequence lengths.
+    /// [`NativeCaptureSafeDecode::replay`] refreshes the metadata in place then launches — fixing the
+    /// decode-attn-under-capture garble (baked-by-value seq metadata).
+    ///
+    /// # Safety
+    /// `capture_fn`/`ctx` must remain valid for the capture, and the callback must only enqueue
+    /// capture-legal work (no alloc/sync/JIT) reading the supplied device buffers.
+    pub unsafe fn capture_safe_decode(
+        &self,
+        capture_fn: HgbDecodeCaptureFn,
+        ctx: *mut c_void,
+        buckets: &[c_int],
+        max_num_seqs: c_int,
+        max_blocks_per_seq: c_int,
+    ) -> Result<NativeCaptureSafeDecode<'_>, NativeRuntimeError> {
+        let mut handle = ptr::null_mut();
+        let code = unsafe {
+            (self.api.decode_pool_handle_create)(
+                Some(capture_fn),
+                ctx,
+                buckets.as_ptr(),
+                buckets.len() as c_int,
+                max_num_seqs,
+                max_blocks_per_seq,
+                &mut handle,
+            )
+        };
+        if code != 0 {
+            return Err(NativeRuntimeError::HipError(code));
+        }
+        if handle.is_null() {
+            return Err(NativeRuntimeError::NullHandle("hgb_decode_pool_handle_create"));
+        }
+        Ok(NativeCaptureSafeDecode {
+            bridge: self,
+            handle,
+        })
+    }
 }
 
 impl Drop for NativeBridge {
@@ -437,6 +510,62 @@ impl Drop for NativeComposedGraph<'_> {
     fn drop(&mut self) {
         if !self.handle.is_null() {
             unsafe { (self.bridge.api.composed_handle_destroy)(self.handle) };
+            self.handle = ptr::null_mut();
+        }
+    }
+}
+
+/// A capture-safe paged-decode pool: one captured hipGraph per bucket over PERSISTENT device metadata
+/// buffers; [`replay`](Self::replay) refreshes the metadata in place then launches, so a captured
+/// decode graph stays correct as the sequence grows (fixes the decode-attn-under-capture garble —
+/// stale baked-by-value seq metadata).
+pub struct NativeCaptureSafeDecode<'a> {
+    bridge: &'a NativeBridge,
+    handle: *mut c_void,
+}
+
+impl<'a> NativeCaptureSafeDecode<'a> {
+    pub fn as_raw(&self) -> *mut c_void {
+        self.handle
+    }
+
+    /// Refresh the persistent metadata from host arrays, then launch the smallest bucket >=
+    /// `input_size`. `seq_lens` is `[num_seqs]`; `block_tables` is `[num_seqs * max_blocks_per_seq]`
+    /// (or `None` to skip the block-table copy). Returns the actual bucket used.
+    ///
+    /// # Safety
+    /// `stream` must be a valid `hipStream_t`, and the host slices must match the pool geometry.
+    pub unsafe fn replay(
+        &self,
+        input_size: c_int,
+        seq_lens: &[c_int],
+        block_tables: Option<&[c_int]>,
+        stream: *mut c_void,
+    ) -> Result<c_int, NativeRuntimeError> {
+        let bt = block_tables.map_or(ptr::null(), |b| b.as_ptr());
+        let mut actual_bucket: c_int = 0;
+        let code = unsafe {
+            (self.bridge.api.decode_pool_handle_replay)(
+                self.handle,
+                input_size,
+                seq_lens.as_ptr(),
+                seq_lens.len() as c_int,
+                bt,
+                stream,
+                &mut actual_bucket,
+            )
+        };
+        match code {
+            0 => Ok(actual_bucket),
+            code => Err(NativeRuntimeError::HipError(code)),
+        }
+    }
+}
+
+impl Drop for NativeCaptureSafeDecode<'_> {
+    fn drop(&mut self) {
+        if !self.handle.is_null() {
+            unsafe { (self.bridge.api.decode_pool_handle_destroy)(self.handle) };
             self.handle = ptr::null_mut();
         }
     }
