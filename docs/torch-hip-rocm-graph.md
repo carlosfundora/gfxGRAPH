@@ -536,7 +536,7 @@ to close specific parity gaps on gfx1030.
 5. **Cache**: Store compiled kernels in `GFX-KERNELS-HIP-PY-RS/py/frozen-jit-kernel-cache/` for reuse
 
 For Triton kernels targeting RDNA2, reference the 296 cached compilations (258 kernel
-variants + 38 runtime) in `GFX-KERNELS-HIP-PY-RS/py/frozen-jit-kernel-cache/triton-gfx1031/`
+variants + 38 runtime) in `GFX-KERNELS-HIP-PY-RS/py/frozen-jit-kernel-cache/triton-gfx1030/`
 as starting patterns.
 
 </details>

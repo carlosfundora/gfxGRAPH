@@ -207,12 +207,17 @@ _TABLE: list[tuple] = [
     (
         "aiter_on_rdna", "warning",
         [r"aiter.*not.*support", r"aiter.*rdna", r"flydsl\.moe_common", r"CK.*not available"],
-        "AITER (AMD CK/ASM kernels) is not available/optimal on this GPU.",
-        "AITER's ASM/CK kernels target CDNA (MI2xx/MI3xx); on RDNA they're missing or fall back.",
-        f"{_GFX1030} is RDNA2 — AITER attention routes to (slower) Triton, and AITER MoE/flydsl bits "
-        "may be absent. Not an error, just unsupported hardware.",
-        "Prefer the Triton path on RDNA (sglang auto-routes `aiter`→triton on gfx10xx). Don't expect "
-        "CK/ASM acceleration here.",
+        "An AITER CK/ASM-only op (e.g. flydsl/CK-MoE, CK rmsnorm) is unbuilt here — but native "
+        "AITER attention works on this gfx1030.",
+        "Only AITER's CK/ASM ops (flydsl moe_common, CK rmsnorm) are CDNA-only (MI2xx/MI3xx). The "
+        "patched AITER flash-attention + JIT path is built and working on this RDNA2 gfx1030.",
+        f"{_GFX1030}: the patched native AITER attention runs here — enable it with "
+        "`SGLANG_USE_AITER=1`. Only the genuinely-unbuilt CK-MoE/flydsl/CK-rmsnorm ops fall back. "
+        "(The old 'AITER routes to Triton on RDNA' claim is FALSE for the patched build.)",
+        "Use native AITER attention (`SGLANG_USE_AITER=1`); reserve the Triton fallback for the "
+        "unbuilt CK ops, not for attention. For capture-safe AITER decode under hipGraph, use the "
+        "device-resident-metadata path (gfxGRAPH `hgb_decode_pool_*`) — the garble was stale baked-by-"
+        "value seq metadata, not an AITER defect.",
     ),
     (
         "invalid_configuration", "error",
