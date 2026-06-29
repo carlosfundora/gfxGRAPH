@@ -58,6 +58,15 @@ fn init_environment_and_affinity() -> Result<(Option<String>, Option<Vec<usize>>
                             if dev_id.contains("73df") || dev_id.contains("73a5") || dev_id.contains("73a0") || dev_id.contains("73bf") {
                                 std::env::set_var("HSA_OVERRIDE_GFX_VERSION", "10.3.0");
                                 hsa_overridden = Some("10.3.0".to_string());
+                                // gfx1030/Zen2 perf env (don't override the user): SDMA copy engines for
+                                // CPU-free H2D/D2H, and non-coherent host memory so the ~96 MB Infinity
+                                // Cache can cache system-RAM reads instead of every access traversing PCIe.
+                                if std::env::var("HSA_ENABLE_SDMA").is_err() {
+                                    std::env::set_var("HSA_ENABLE_SDMA", "1");
+                                }
+                                if std::env::var("HIP_HOST_COHERENT").is_err() {
+                                    std::env::set_var("HIP_HOST_COHERENT", "0");
+                                }
                                 break;
                             }
                         }
