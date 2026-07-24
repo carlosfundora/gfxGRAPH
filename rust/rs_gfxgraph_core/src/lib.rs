@@ -16,6 +16,7 @@ pub mod signal;
 pub mod stats;
 pub mod validator;
 pub mod wave;
+pub mod wave_gang;
 
 pub use adapter::GfxGraphAdapterKind;
 pub use capture_gate::{lock_capture, lock_replay, unlock_capture, unlock_replay};
@@ -43,4 +44,8 @@ pub use validator::ValidatorConfig;
 pub use wave::{
     GfxArch, HardwareProfile, KernelLaunchShape, OccupancyHint, WaveError, WavefrontSpec,
     WorkgroupShape,
+};
+pub use wave_gang::{
+    ConcurrentWaveGangGate, ConcurrentWaveGangPlan, ConcurrentWaveReplayLease, WaveGangError,
+    WaveGangLease, WaveGangReplaySnapshot,
 };
