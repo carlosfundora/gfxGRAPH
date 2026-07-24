@@ -1,6 +1,7 @@
-use pyo3::prelude::*;
-use std::sync::{Arc, Mutex};
 use dashmap::DashMap;
+use pyo3::prelude::*;
+use pyo3::types::PyAny;
+use std::sync::{Arc, Mutex};
 
 // We use an internal struct to hold the metrics to ensure thread safety
 struct StatsCore {
@@ -30,14 +31,17 @@ fn bump(counter: &str, amount: i64) -> PyResult<()> {
 
 #[pyfunction]
 fn record_replay_us(us: f64) -> PyResult<()> {
-    *STATS_CORE.counters.entry("replay_count".to_string()).or_insert(0) += 1;
+    *STATS_CORE
+        .counters
+        .entry("replay_count".to_string())
+        .or_insert(0) += 1;
     let mut total = STATS_CORE.total_replay_us.lock().unwrap();
     *total += us;
     Ok(())
 }
 
 #[pyfunction]
-fn stats(py: Python<'_>) -> PyResult<PyObject> {
+fn stats(py: Python<'_>) -> PyResult<Py<PyAny>> {
     use pyo3::types::PyDict;
     let dict = PyDict::new(py);
 
@@ -46,7 +50,12 @@ fn stats(py: Python<'_>) -> PyResult<PyObject> {
     }
 
     // Fill in default required counters if they don't exist
-    for default_counter in &["capture_count", "replay_count", "fallback_count", "validation_failures"] {
+    for default_counter in &[
+        "capture_count",
+        "replay_count",
+        "fallback_count",
+        "validation_failures",
+    ] {
         if !dict.contains(default_counter)? {
             dict.set_item(default_counter, 0)?;
         }
@@ -58,7 +67,11 @@ fn stats(py: Python<'_>) -> PyResult<PyObject> {
         None => 0,
     };
 
-    let avg = if count > 0 { total / (count as f64) } else { 0.0 };
+    let avg = if count > 0 {
+        total / (count as f64)
+    } else {
+        0.0
+    };
 
     dict.set_item("avg_replay_us", avg)?;
 

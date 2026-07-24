@@ -1,13 +1,14 @@
+use pyo3::exceptions::{PyKeyError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::exceptions::{PyValueError, PyKeyError, PyRuntimeError, PyTypeError};
-use pyo3::types::PyDict;
+use pyo3::types::{PyAny, PyDict};
 use rs_gfxgraph_core::capture_gate;
 use std::collections::HashSet;
-use std::sync::RwLock;
 use std::sync::OnceLock;
+use std::sync::RwLock;
 
 /// Stores the result of system-level environment and core-affinity initializations.
-static INIT_RESULT: OnceLock<Result<(Option<String>, Option<Vec<usize>>), String>> = OnceLock::new();
+static INIT_RESULT: OnceLock<Result<(Option<String>, Option<Vec<usize>>), String>> =
+    OnceLock::new();
 
 /// Helper to parse standard Linux sysfs CPU lists (e.g. "0-2,12-14").
 #[cfg(target_os = "linux")]
@@ -18,7 +19,8 @@ fn parse_cpu_list(list_str: &str) -> Vec<usize> {
         if part.contains('-') {
             let mut range_parts = part.split('-');
             if let (Some(start_str), Some(end_str)) = (range_parts.next(), range_parts.next()) {
-                if let (Ok(start), Ok(end)) = (start_str.parse::<usize>(), end_str.parse::<usize>()) {
+                if let (Ok(start), Ok(end)) = (start_str.parse::<usize>(), end_str.parse::<usize>())
+                {
                     for core in start..=end {
                         cores.push(core);
                     }
@@ -49,13 +51,20 @@ fn init_environment_and_affinity() -> Result<(Option<String>, Option<Vec<usize>>
                 if name.starts_with("card") {
                     let dev_path = path.join("device/device");
                     let vend_path = path.join("device/vendor");
-                    if let (Ok(dev_str), Ok(vend_str)) = (std::fs::read_to_string(dev_path), std::fs::read_to_string(vend_path)) {
+                    if let (Ok(dev_str), Ok(vend_str)) = (
+                        std::fs::read_to_string(dev_path),
+                        std::fs::read_to_string(vend_path),
+                    ) {
                         let dev_id = dev_str.trim().to_lowercase();
                         let vend_id = vend_str.trim().to_lowercase();
                         // 0x1002 is the AMD PCI vendor ID
                         if vend_id.contains("1002") {
                             // Check for Navi 22 (0x73df - RX 6700 XT) or Navi 21 (0x73a5, 0x73a0, 0x73bf)
-                            if dev_id.contains("73df") || dev_id.contains("73a5") || dev_id.contains("73a0") || dev_id.contains("73bf") {
+                            if dev_id.contains("73df")
+                                || dev_id.contains("73a5")
+                                || dev_id.contains("73a0")
+                                || dev_id.contains("73bf")
+                            {
                                 std::env::set_var("HSA_OVERRIDE_GFX_VERSION", "10.3.0");
                                 hsa_overridden = Some("10.3.0".to_string());
                                 // gfx1030/Zen2 perf env (don't override the user): SDMA copy engines for
@@ -81,7 +90,10 @@ fn init_environment_and_affinity() -> Result<(Option<String>, Option<Vec<usize>>
     unsafe {
         let cpu = libc::sched_getcpu();
         if cpu >= 0 {
-            let cache_list_path = format!("/sys/devices/system/cpu/cpu{}/cache/index3/shared_cpu_list", cpu);
+            let cache_list_path = format!(
+                "/sys/devices/system/cpu/cpu{}/cache/index3/shared_cpu_list",
+                cpu
+            );
             if let Ok(list_str) = std::fs::read_to_string(&cache_list_path) {
                 let cores = parse_cpu_list(&list_str);
                 if !cores.is_empty() {
@@ -91,7 +103,8 @@ fn init_environment_and_affinity() -> Result<(Option<String>, Option<Vec<usize>>
                             libc::CPU_SET(core, &mut cpuset);
                         }
                     }
-                    let res = libc::sched_setaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &cpuset);
+                    let res =
+                        libc::sched_setaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &cpuset);
                     if res == 0 {
                         pinned_cores = Some(cores);
                     }
@@ -138,7 +151,10 @@ fn init_status_message() -> PyResult<String> {
                 msg.push_str("No programmatic HSA overrides needed. ");
             }
             if let Some(cores) = pinned {
-                msg.push_str(&format!("Successfully pinned thread to local L3 cache/CCX cores: {:?}", cores));
+                msg.push_str(&format!(
+                    "Successfully pinned thread to local L3 cache/CCX cores: {:?}",
+                    cores
+                ));
             } else {
                 msg.push_str("Affinity core-pinning not executed or bypassed.");
             }
@@ -250,12 +266,12 @@ impl<'a> Drop for ReentrancyGuard<'a> {
 #[pyclass]
 pub struct ConditionalGraphRunner {
     branches: Vec<String>,
-    graphs: PyObject, // dict branch_name -> CUDAGraph
-    static_outputs: PyObject, // dict branch_name -> static output tensor
+    graphs: Py<PyAny>,         // dict branch_name -> CUDAGraph
+    static_outputs: Py<PyAny>, // dict branch_name -> static output tensor
     failed_branches: RwLock<HashSet<String>>,
     running_branches: RwLock<HashSet<String>>, // Keeps track of currently replaying branches
-    shared_input: PyObject, // optional shared tensor
-    branches_callbacks: PyObject, // dict branch_name -> callable fallback
+    shared_input: Py<PyAny>,                   // optional shared tensor
+    branches_callbacks: Py<PyAny>,             // dict branch_name -> callable fallback
 }
 
 #[pymethods]
@@ -263,11 +279,11 @@ impl ConditionalGraphRunner {
     #[new]
     fn new(
         branches: Vec<String>,
-        graphs: PyObject,
-        static_outputs: PyObject,
+        graphs: Py<PyAny>,
+        static_outputs: Py<PyAny>,
         failed_branches: Vec<String>,
-        shared_input: PyObject,
-        branches_callbacks: PyObject,
+        shared_input: Py<PyAny>,
+        branches_callbacks: Py<PyAny>,
     ) -> Self {
         let mut failed = HashSet::new();
         for b in failed_branches {
@@ -292,13 +308,12 @@ impl ConditionalGraphRunner {
         &self,
         py: Python<'py>,
         branch: &str,
-        input_tensor: Option<PyObject>,
-    ) -> PyResult<PyObject> {
+        input_tensor: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
         if !self.branches.iter().any(|b| b == branch) {
             return Err(PyKeyError::new_err(format!(
                 "Unknown branch '{}'. Available: {:?}",
-                branch,
-                self.branches
+                branch, self.branches
             )));
         }
 
@@ -311,7 +326,9 @@ impl ConditionalGraphRunner {
             }
             let is_cuda: bool = input.getattr(py, "is_cuda")?.extract(py)?;
             if !is_cuda {
-                return Err(PyValueError::new_err("input_tensor must be on CUDA/HIP device"));
+                return Err(PyValueError::new_err(
+                    "input_tensor must be on CUDA/HIP device",
+                ));
             }
         }
 
@@ -344,7 +361,10 @@ impl ConditionalGraphRunner {
         }
 
         // Establish the RAII drop guard to release this branch execution lock on exit
-        let _guard = ReentrancyGuard { runner: self, branch };
+        let _guard = ReentrancyGuard {
+            runner: self,
+            branch,
+        };
 
         // Copy input to shared static buffer if necessary
         if let Some(ref input) = input_tensor {
@@ -356,14 +376,22 @@ impl ConditionalGraphRunner {
         let time_mod = py.import("time")?;
         let t0: f64 = time_mod.call_method0("perf_counter")?.extract()?;
 
-        let graphs_dict = self.graphs.downcast_bound::<PyDict>(py)
+        let graphs_dict = self
+            .graphs
+            .cast_bound::<PyDict>(py)
             .map_err(|_| PyRuntimeError::new_err("Invalid state: graphs must be a dict"))?;
         let graph = graphs_dict.get_item(branch)?;
         if let Some(g) = graph {
             if let Err(e) = g.call_method0("replay") {
                 let log_mod = py.import("logging")?;
                 let logger = log_mod.call_method1("getLogger", ("gfxgraph",))?;
-                logger.call_method1("warning", (format!("Replay failed for branch '{}': {:?} — eager fallback", branch, e),))?;
+                logger.call_method1(
+                    "warning",
+                    (format!(
+                        "Replay failed for branch '{}': {:?} — eager fallback",
+                        branch, e
+                    ),),
+                )?;
 
                 if let Ok(mut lock) = self.failed_branches.write() {
                     lock.insert(branch.to_string());
@@ -378,21 +406,36 @@ impl ConditionalGraphRunner {
             let _ = enable_mod.call_method1("record_replay_us", (us,));
         }
 
-        let outputs_dict = self.static_outputs.downcast_bound::<PyDict>(py)
+        let outputs_dict = self
+            .static_outputs
+            .cast_bound::<PyDict>(py)
             .map_err(|_| PyRuntimeError::new_err("Invalid state: static_outputs must be a dict"))?;
         let output = outputs_dict.get_item(branch)?;
         if let Some(out) = output {
             Ok(out.into())
         } else {
-            Err(PyRuntimeError::new_err("Static output buffer not found for branch"))
+            Err(PyRuntimeError::new_err(
+                "Static output buffer not found for branch",
+            ))
         }
     }
 
     /// Evaluates branch callback function eagerly inside a PyTorch no_grad context.
-    fn eager_fallback<'py>(&self, py: Python<'py>, branch: &str, input_tensor: Option<PyObject>) -> PyResult<PyObject> {
-        let callbacks_dict = self.branches_callbacks.downcast_bound::<PyDict>(py)
-            .map_err(|_| PyRuntimeError::new_err("Invalid state: branches_callbacks must be a dict"))?;
-        let fn_obj = callbacks_dict.get_item(branch)?.ok_or_else(|| PyRuntimeError::new_err("Branch fallback not found"))?;
+    fn eager_fallback<'py>(
+        &self,
+        py: Python<'py>,
+        branch: &str,
+        input_tensor: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
+        let callbacks_dict = self
+            .branches_callbacks
+            .cast_bound::<PyDict>(py)
+            .map_err(|_| {
+                PyRuntimeError::new_err("Invalid state: branches_callbacks must be a dict")
+            })?;
+        let fn_obj = callbacks_dict
+            .get_item(branch)?
+            .ok_or_else(|| PyRuntimeError::new_err("Branch fallback not found"))?;
 
         if let Ok(enable_mod) = py.import("gfxgraph._enable") {
             let _ = enable_mod.call_method1("bump", ("fallback_count",));
@@ -408,7 +451,10 @@ impl ConditionalGraphRunner {
         } else if !self.shared_input.is_none(py) {
             fn_obj.call1((&self.shared_input,))
         } else {
-            Err(PyRuntimeError::new_err(format!("No input available for branch '{}'", branch)))
+            Err(PyRuntimeError::new_err(format!(
+                "No input available for branch '{}'",
+                branch
+            )))
         };
 
         match result {
@@ -452,16 +498,16 @@ impl CaptureLock {
 
     fn __enter__(mut slf: PyRefMut<'_, Self>, py: Python<'_>) -> PyResult<()> {
         // Release the GIL while blocking on the exclusive lock.
-        py.allow_threads(capture_gate::lock_capture);
+        py.detach(capture_gate::lock_capture);
         slf.held = true;
         Ok(())
     }
 
     fn __exit__(
         mut slf: PyRefMut<'_, Self>,
-        _exc_type: PyObject,
-        _exc_value: PyObject,
-        _traceback: PyObject,
+        _exc_type: Py<PyAny>,
+        _exc_value: Py<PyAny>,
+        _traceback: Py<PyAny>,
     ) -> PyResult<bool> {
         if slf.held {
             capture_gate::unlock_capture();
@@ -489,16 +535,16 @@ impl ReplayLock {
     }
 
     fn __enter__(mut slf: PyRefMut<'_, Self>, py: Python<'_>) -> PyResult<()> {
-        py.allow_threads(capture_gate::lock_replay);
+        py.detach(capture_gate::lock_replay);
         slf.held = true;
         Ok(())
     }
 
     fn __exit__(
         mut slf: PyRefMut<'_, Self>,
-        _exc_type: PyObject,
-        _exc_value: PyObject,
-        _traceback: PyObject,
+        _exc_type: Py<PyAny>,
+        _exc_value: Py<PyAny>,
+        _traceback: Py<PyAny>,
     ) -> PyResult<bool> {
         if slf.held {
             capture_gate::unlock_replay();
@@ -514,7 +560,7 @@ impl ReplayLock {
 /// GIL while blocking. Pair exactly once with [`release_capture_lock`].
 #[pyfunction]
 fn acquire_capture_lock(py: Python<'_>) {
-    py.allow_threads(capture_gate::lock_capture);
+    py.detach(capture_gate::lock_capture);
 }
 
 /// Release the process-global capture lock acquired by [`acquire_capture_lock`].
@@ -566,10 +612,10 @@ impl BridgedGraphValidator {
     fn maybe_validate<'py>(
         &self,
         py: Python<'py>,
-        graph_output: PyObject,
-        input_tensor: Option<PyObject>,
-        model_fn: Option<PyObject>,
-    ) -> PyResult<PyObject> {
+        graph_output: Py<PyAny>,
+        input_tensor: Option<Py<PyAny>>,
+        model_fn: Option<Py<PyAny>>,
+    ) -> PyResult<Py<PyAny>> {
         if !self.validation_enabled {
             return Ok(graph_output);
         }
