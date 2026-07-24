@@ -1,0 +1,274 @@
+{
+  "schema_version": "gfxgraph-benchmark-v1",
+  "report_kind": "benchmark_gate_phase_report",
+  "run_id": "native-only-runtime-20260616",
+  "phase": "clean-candidate",
+  "timestamp_utc": "2026-06-16T23:33:26Z",
+  "report_date": "2026-06-16",
+  "schema_path": "benchmarks/schemas/gfxgraph-benchmark-v1.schema.json",
+  "repo": {
+    "root": "/home/local/ai/projects/gfxGRAPH",
+    "branch": "rust-hip-cpp",
+    "commit": "47d293471636d041a4c58e39e55e9e0e9bd5bf66",
+    "tracked_dirty": true
+  },
+  "environment": {
+    "os": "Linux FRACTAL 6.8.0-90-generic #91-Ubuntu SMP PREEMPT_DYNAMIC Tue Nov 18 14:14:30 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux",
+    "rocm_path": "/opt/rocm",
+    "hipcc_version": "HIP version: 7.2.26015-fc0010cf6a\nAMD clang version 22.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-7.2.0 26014 7b800a19466229b8479a78de19143dc33c3ab9b5)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/rocm-7.2.0/lib/llvm/bin\nConfiguration file: /opt/rocm-7.2.0/lib/llvm/bin/clang++.cfg",
+    "env": {
+      "GFXGRAPH": null,
+      "GFXGRAPH_VALIDATE": null,
+      "GFXGRAPH_VRAM_CAP": null,
+      "HIP_VISIBLE_DEVICES": null,
+      "HSA_OVERRIDE_GFX_VERSION": "10.3.0",
+      "ROCM_PATH": "/opt/rocm"
+    }
+  },
+  "python": null,
+  "package_state": {
+    "target_import_policy": "native-only",
+    "graph_enabled": false,
+    "allow_package_changes": false,
+    "package_actions": []
+  },
+  "gate_checks": [
+    {
+      "name": "native-runtime-only",
+      "status": "passed",
+      "message": "native-only gate skips Python package transition and import provenance",
+      "details": {
+        "phase": "clean-candidate",
+        "python": null
+      }
+    }
+  ],
+  "benchmarks": [
+    {
+      "name": "python-import-provenance",
+      "kind": "package-provenance",
+      "status": "skipped",
+      "command": "",
+      "iterations": null,
+      "duration_ms": null,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "metrics": {
+        "skip_reason": "skipped by --native-only"
+      }
+    },
+    {
+      "name": "torch-capture-policy",
+      "kind": "capture-policy",
+      "status": "skipped",
+      "command": "",
+      "iterations": null,
+      "duration_ms": null,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "metrics": {
+        "skip_reason": "skipped by --native-only"
+      }
+    },
+    {
+      "name": "rust-bucket-router-core",
+      "kind": "rust-micro",
+      "status": "passed",
+      "command": "in-process BucketRouterCore::route loop",
+      "iterations": 200000,
+      "duration_ms": 59.107106,
+      "throughput_ops_per_sec": 3383687.9105534283,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "metrics": {
+        "bucket_count": 10,
+        "ready_routes": 200000
+      }
+    },
+    {
+      "name": "rust-stats-sample-update",
+      "kind": "rust-micro",
+      "status": "passed",
+      "command": "in-process GfxGraphStatsSample update loop",
+      "iterations": 200000,
+      "duration_ms": 1.3916849999999998,
+      "throughput_ops_per_sec": 143710681.65569076,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "metrics": {
+        "failures": 196,
+        "samples": 200000
+      }
+    },
+    {
+      "name": "rust-native-runtime-cli",
+      "kind": "rust-native",
+      "status": "passed",
+      "command": "/home/local/ai/projects/gfxGRAPH/target/debug/gfxgraph-native-probe --repo-root /home/local/ai/projects/gfxGRAPH --event-count 3 --sample-count 8",
+      "iterations": null,
+      "duration_ms": 48.82197600000001,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "{\"candidate_libraries\":[\"/home/local/ai/projects/gfxGRAPH/build/libhipgraph_bridge.so\",\"/home/local/ai/projects/gfxGRAPH/build/lib/libhipgraph_bridge.so\",\"/usr/local/lib/libhipgraph_bridge.so\"],\"duration_ms\":40.475153,\"event_count\":3,\"init_error\":null,\"init_ok\":true,\"initialized\":true,\"kind\":\"gfxgraph-native-probe-v1\",\"library_path\":\"/home/local/ai/projects/gfxGRAPH/build/libhipgraph_bridge.so\",\"native_contracts\":[\"lifecycle\",\"profiler\",\"pipeline_handles\",\"composed_handles\"],\"profiler_counters\":{\"capacity\":4096,\"dropped\":0,\"written\":3},\"python_used\":false,\"recorded_sequences\":[1,2,3],\"repo_root\":\"/home/local/ai/projects/gfxGRAPH\",\"snapshot_sample_count\":3,\"status\":\"passed\",\"version\":{\"gfx_target\":\"gfx1030\",\"major\":0,\"minor\":3,\"patch\":4,\"rocm_version\":\"7.2.26015\"}}\n",
+      "stderr_tail": "",
+      "metrics": {
+        "event_count": 3,
+        "init_ok": true,
+        "initialized": true,
+        "library_path": "/home/local/ai/projects/gfxGRAPH/build/libhipgraph_bridge.so",
+        "native_contracts": [
+          "lifecycle",
+          "profiler",
+          "pipeline_handles",
+          "composed_handles"
+        ],
+        "payload": {
+          "candidate_libraries": [
+            "/home/local/ai/projects/gfxGRAPH/build/libhipgraph_bridge.so",
+            "/home/local/ai/projects/gfxGRAPH/build/lib/libhipgraph_bridge.so",
+            "/usr/local/lib/libhipgraph_bridge.so"
+          ],
+          "duration_ms": 40.475153,
+          "event_count": 3,
+          "init_error": null,
+          "init_ok": true,
+          "initialized": true,
+          "kind": "gfxgraph-native-probe-v1",
+          "library_path": "/home/local/ai/projects/gfxGRAPH/build/libhipgraph_bridge.so",
+          "native_contracts": [
+            "lifecycle",
+            "profiler",
+            "pipeline_handles",
+            "composed_handles"
+          ],
+          "profiler_counters": {
+            "capacity": 4096,
+            "dropped": 0,
+            "written": 3
+          },
+          "python_used": false,
+          "recorded_sequences": [
+            1,
+            2,
+            3
+          ],
+          "repo_root": "/home/local/ai/projects/gfxGRAPH",
+          "snapshot_sample_count": 3,
+          "status": "passed",
+          "version": {
+            "gfx_target": "gfx1030",
+            "major": 0,
+            "minor": 3,
+            "patch": 4,
+            "rocm_version": "7.2.26015"
+          }
+        },
+        "profiler_counters": {
+          "capacity": 4096,
+          "dropped": 0,
+          "written": 3
+        },
+        "python_used": false,
+        "snapshot_sample_count": 3,
+        "version": {
+          "gfx_target": "gfx1030",
+          "major": 0,
+          "minor": 3,
+          "patch": 4,
+          "rocm_version": "7.2.26015"
+        }
+      }
+    },
+    {
+      "name": "rust-native-runtime-ffi",
+      "kind": "rust-native",
+      "status": "passed",
+      "command": "NativeBridge::open_default(/home/local/ai/projects/gfxGRAPH)",
+      "iterations": null,
+      "duration_ms": 64.377537,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "metrics": {
+        "init_error": null,
+        "initialized": true,
+        "library_path": "/home/local/ai/projects/gfxGRAPH/build/libhipgraph_bridge.so",
+        "profiler_counters": {
+          "capacity": 4096,
+          "dropped": 0,
+          "written": 1
+        },
+        "recorded_seq": 1,
+        "sample_count": 1,
+        "version": {
+          "gfx_target": "gfx1030",
+          "major": 0,
+          "minor": 3,
+          "patch": 4,
+          "rocm_version": "7.2.26015"
+        }
+      }
+    },
+    {
+      "name": "native-hip-benchmark",
+      "kind": "hip-native",
+      "status": "passed",
+      "command": "/home/local/ai/projects/gfxGRAPH/build/benchmark_pipeline",
+      "iterations": 10000,
+      "duration_ms": 409.449752,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "=== benchmark_pipeline ===\nWarmup launches: 100\nMeasured launches: 10000\nAverage pipeline launch latency: 25.62 us\nDevice clock64 probe cycles: 352037\nProfiler samples copied: 16\nProfiler events written: 10103\nProfiler events dropped: 6007\n",
+      "stderr_tail": "",
+      "metrics": {
+        "average_pipeline_launch_latency_us": 25.62,
+        "device_clock64_probe_cycles": 352037,
+        "measured_launches": 10000,
+        "profiler_events_dropped": 6007,
+        "profiler_events_written": 10103,
+        "profiler_samples_copied": 16,
+        "warmup_launches": 100
+      }
+    },
+    {
+      "name": "native-hip-tests",
+      "kind": "hip-native",
+      "status": "passed",
+      "command": "ctest --test-dir /home/local/ai/projects/gfxGRAPH/build --output-on-failure",
+      "iterations": null,
+      "duration_ms": 1555.469048,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "Test project /home/local/ai/projects/gfxGRAPH/build\n    Start 1: conditional\n1/7 Test #1: conditional ......................   Passed    0.16 sec\n    Start 2: pipeline\n2/7 Test #2: pipeline .........................   Passed    0.17 sec\n    Start 3: shapes\n3/7 Test #3: shapes ...........................   Passed    0.30 sec\n    Start 4: compositor\n4/7 Test #4: compositor .......................   Passed    0.32 sec\n    Start 5: routing\n5/7 Test #5: routing ..........................   Passed    0.23 sec\n    Start 6: profiler\n6/7 Test #6: profiler .........................   Passed    0.06 sec\n    Start 7: runtime_handles\n7/7 Test #7: runtime_handles ..................   Passed    0.20 sec\n\n100% tests passed, 0 tests failed out of 7\n\nTotal Test time (real) =   1.44 sec\n",
+      "stderr_tail": "",
+      "metrics": {}
+    },
+    {
+      "name": "readme-public-benchmark",
+      "kind": "python-public",
+      "status": "skipped",
+      "command": "",
+      "iterations": null,
+      "duration_ms": null,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "metrics": {
+        "skip_reason": "skipped by --native-only"
+      }
+    },
+    {
+      "name": "legacy-python-microbenchmarks",
+      "kind": "python-micro",
+      "status": "skipped",
+      "command": "",
+      "iterations": null,
+      "duration_ms": null,
+      "throughput_ops_per_sec": null,
+      "stdout_tail": "",
+      "stderr_tail": "",
+      "metrics": {
+        "skip_reason": "skipped by --native-only"
+      }
+    }
+  ]
+}

@@ -12,6 +12,8 @@
 #pragma once
 #include <hip/hip_runtime.h>
 #include <pthread.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -143,6 +145,70 @@ HGB_EXPORT hipError_t hgb_pipeline_update_kernel(
 
 HGB_EXPORT void hgb_pipeline_destroy(hgb_pipeline_t* pipe);
 
+HGB_EXPORT hipError_t hgb_pipeline_update_and_launch(
+    hgb_pipeline_t*       pipe,
+    hipGraphNode_t        node,
+    hipKernelNodeParams*  params
+);
+
+/* ── Native Telemetry ───────────────────────────────── */
+
+#define HGB_PROFILER_CAPACITY 4096
+
+typedef enum {
+    HGB_PROFILE_EVENT_UNKNOWN             = 0,
+    HGB_PROFILE_EVENT_PIPELINE_CREATE     = 1,
+    HGB_PROFILE_EVENT_PIPELINE_UPLOAD     = 2,
+    HGB_PROFILE_EVENT_PIPELINE_LAUNCH     = 3,
+    HGB_PROFILE_EVENT_PIPELINE_UPDATE     = 4,
+    HGB_PROFILE_EVENT_COMPOSE_LAUNCH      = 5,
+    HGB_PROFILE_EVENT_SHAPE_LAUNCH        = 6,
+    HGB_PROFILE_EVENT_DEVICE_CLOCK_PROBE  = 7,
+} hgb_profile_event_kind_t;
+
+typedef struct {
+    uint64_t seq;
+    uint64_t timestamp_ns;
+    uint64_t duration_ns;
+    uint64_t value0;
+    uint64_t value1;
+    uint32_t event;
+    uint32_t device_id;
+    uint32_t stream_id;
+    uint32_t flags;
+} hgb_profile_sample_t;
+
+typedef struct {
+    uint64_t written;
+    uint64_t dropped;
+    uint64_t capacity;
+} hgb_profile_counters_t;
+
+/** Monotonic host timestamp in nanoseconds, suitable for native reports. */
+HGB_EXPORT uint64_t hgb_monotonic_ns(void);
+
+/** Reset the native cyclic profiler buffer. Safe while no producer is active. */
+HGB_EXPORT void hgb_profiler_reset(void);
+
+/** Record one native event into the lock-free cyclic profiler buffer. */
+HGB_EXPORT uint64_t hgb_profiler_record(
+    uint32_t event,
+    uint64_t duration_ns,
+    uint64_t value0,
+    uint64_t value1
+);
+
+/**
+ * Copy the newest profiler samples into caller memory.
+ *
+ * Returns the number of samples copied. Samples are ordered oldest to newest.
+ */
+HGB_EXPORT size_t hgb_profiler_snapshot(
+    hgb_profile_sample_t*   out,
+    size_t                  max_samples,
+    hgb_profile_counters_t* counters
+);
+
 /* ── Gap 53: Dynamic Shape Management ───────────────── */
 
 typedef hipError_t (*hgb_capture_fn)(int size, hipGraph_t* out, void* ctx);
@@ -196,6 +262,79 @@ HGB_EXPORT hipError_t hgb_shape_pool_update_params(
 
 HGB_EXPORT void hgb_shape_pool_destroy(hgb_shape_pool_t* pool);
 
+/* ── Capture-safe paged decode ──────────────────────────
+ *
+ * Fixes decode-attention-under-hipGraph replay-data-unsafety: a captured decode graph that bakes the
+ * per-step sequence length / block table BY VALUE garbles when replayed as the sequence grows (each
+ * replay attends the capture-time length). This pool owns PERSISTENT device metadata buffers at fixed
+ * addresses; the captured graph reads them, and replay = memcpy(live -> persistent) + hipGraphLaunch.
+ * No hipGraphExec*SetParams — the kernel-node pointer args never change, only the buffer CONTENTS, so
+ * the captured node reads fresh data. One graph per bucket (bucket-constant max) replays correctly for
+ * every decode step. (Wires the previously-vestigial hgb_shape_pool_t::static_bufs slot, the right way.)
+ */
+
+/**
+ * Capture callback for decode. Build a graph for `bucket_max` whose decode kernel reads the supplied
+ * PERSISTENT device metadata buffers — d_seq_lens[max_num_seqs] and
+ * d_block_tables[max_num_seqs * max_blocks_per_seq]. The SAME buffers are passed for every bucket, so a
+ * single in-place refresh before launch updates whichever bucket's graph runs. Sizing args (head/page
+ * geometry, kernel pointers) ride in `ctx`.
+ */
+typedef hipError_t (*hgb_decode_capture_fn)(
+    int         bucket_max,
+    const int*  d_seq_lens,
+    const int*  d_block_tables,
+    hipGraph_t* out,
+    void*       ctx
+);
+
+typedef struct {
+    int*             bucket_sizes;
+    int              num_buckets;
+    hipGraphExec_t*  execs;
+    hipGraph_t*      graphs;
+    hipEvent_t*      events;            /**< Per-bucket event for in-flight tracking */
+    int*             d_seq_lens;        /**< persistent device int[max_num_seqs] */
+    int*             d_block_tables;    /**< persistent device int[max_num_seqs*max_blocks_per_seq] */
+    int              max_num_seqs;
+    int              max_blocks_per_seq;
+    int              device_id;
+    pthread_mutex_t  lock;
+} hgb_decode_pool_t;
+
+/**
+ * Create a capture-safe decode pool: allocate the persistent metadata buffers, then capture one graph
+ * per bucket via `fn` (each reading those buffers) and instantiate it. `buckets` = ascending per-bucket
+ * max sequence lengths.
+ */
+HGB_EXPORT hipError_t hgb_decode_pool_create(
+    hgb_decode_capture_fn fn,
+    void*                 ctx,
+    const int*            buckets,
+    int                   num_buckets,
+    int                   max_num_seqs,
+    int                   max_blocks_per_seq,
+    hgb_decode_pool_t*    out
+);
+
+/**
+ * Refresh the persistent metadata in place from host arrays, then launch the smallest bucket >=
+ * input_size. `h_seq_lens` is int[num_seqs]; `h_block_tables` is int[num_seqs*max_blocks_per_seq]
+ * (may be NULL to skip the block-table copy). The memcpy is enqueued on `stream` before the launch, so
+ * the replay sees the fresh metadata. Returns the actual bucket used in `actual_bucket`.
+ */
+HGB_EXPORT hipError_t hgb_decode_pool_replay(
+    hgb_decode_pool_t* pool,
+    int                input_size,
+    const int*         h_seq_lens,
+    int                num_seqs,
+    const int*         h_block_tables,
+    hipStream_t        stream,
+    int*               actual_bucket
+);
+
+HGB_EXPORT void hgb_decode_pool_destroy(hgb_decode_pool_t* pool);
+
 /* ── Gap 54: Capture Compositor ─────────────────────── */
 
 typedef struct {
@@ -237,6 +376,82 @@ HGB_EXPORT hipError_t hgb_compose_launch(
 );
 
 HGB_EXPORT void hgb_compose_destroy(hgb_composed_graph_t* comp);
+
+/* ── Opaque Native Runtime Handles ──────────────────── */
+
+typedef struct hgb_pipeline_handle hgb_pipeline_handle_t;
+typedef struct hgb_composed_graph_handle hgb_composed_graph_handle_t;
+typedef struct hgb_decode_pool_handle hgb_decode_pool_handle_t;
+
+/**
+ * Create an opaque double-buffered pipeline handle for FFI callers.
+ *
+ * This keeps pthread/HIP struct layout out of the Rust ABI while preserving
+ * the native launch path.
+ */
+HGB_EXPORT hipError_t hgb_pipeline_handle_create(
+    hipGraph_t              graph,
+    hgb_pipeline_handle_t** out
+);
+
+HGB_EXPORT hipError_t hgb_pipeline_handle_launch(hgb_pipeline_handle_t* handle);
+
+HGB_EXPORT hipError_t hgb_pipeline_handle_update_kernel(
+    hgb_pipeline_handle_t*  handle,
+    hipGraphNode_t          node,
+    hipKernelNodeParams*    params
+);
+
+HGB_EXPORT hipError_t hgb_pipeline_handle_update_and_launch(
+    hgb_pipeline_handle_t*  handle,
+    hipGraphNode_t          node,
+    hipKernelNodeParams*    params
+);
+
+HGB_EXPORT void hgb_pipeline_handle_destroy(hgb_pipeline_handle_t* handle);
+
+HGB_EXPORT hipError_t hgb_composed_handle_create(
+    hipGraph_t*                  sub_graphs,
+    int                          count,
+    const int*                   deps,
+    hgb_composed_graph_handle_t** out
+);
+
+HGB_EXPORT hipError_t hgb_composed_handle_launch(
+    hgb_composed_graph_handle_t* handle,
+    hipStream_t                  stream
+);
+
+HGB_EXPORT hipError_t hgb_composed_handle_update_child(
+    hgb_composed_graph_handle_t* handle,
+    int                          child_index,
+    hipGraph_t                   new_sub_graph
+);
+
+HGB_EXPORT void hgb_composed_handle_destroy(hgb_composed_graph_handle_t* handle);
+
+/* Capture-safe decode pool (opaque handle over hgb_decode_pool_*). */
+HGB_EXPORT hipError_t hgb_decode_pool_handle_create(
+    hgb_decode_capture_fn      fn,
+    void*                      ctx,
+    const int*                 buckets,
+    int                        num_buckets,
+    int                        max_num_seqs,
+    int                        max_blocks_per_seq,
+    hgb_decode_pool_handle_t** out
+);
+
+HGB_EXPORT hipError_t hgb_decode_pool_handle_replay(
+    hgb_decode_pool_handle_t* handle,
+    int                       input_size,
+    const int*                h_seq_lens,
+    int                       num_seqs,
+    const int*                h_block_tables,
+    hipStream_t               stream,
+    int*                      actual_bucket
+);
+
+HGB_EXPORT void hgb_decode_pool_handle_destroy(hgb_decode_pool_handle_t* handle);
 
 /* ── Utilities ──────────────────────────────────────── */
 

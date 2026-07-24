@@ -1,0 +1,296 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/carlosfundora/gfxGRAPH/benchmarks/schemas/gfxgraph-benchmark-v1.schema.json",
+  "title": "gfxGRAPH benchmark report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "report_kind",
+    "run_id",
+    "phase",
+    "timestamp_utc",
+    "report_date",
+    "schema_path",
+    "repo",
+    "environment",
+    "python",
+    "package_state",
+    "gate_checks",
+    "benchmarks"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "gfxgraph-benchmark-v1"
+    },
+    "report_kind": {
+      "const": "benchmark_gate_phase_report"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "phase": {
+      "enum": [
+        "installed-baseline",
+        "installed-graph-enabled",
+        "clean-candidate",
+        "graph-candidate"
+      ]
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "minLength": 1
+    },
+    "report_date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "schema_path": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root",
+        "branch",
+        "commit",
+        "tracked_dirty"
+      ],
+      "properties": {
+        "root": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string"
+        },
+        "tracked_dirty": {
+          "type": "boolean"
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "os",
+        "rocm_path",
+        "hipcc_version",
+        "env"
+      ],
+      "properties": {
+        "os": {
+          "type": "string"
+        },
+        "rocm_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hipcc_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "python": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "package_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_import_policy",
+        "graph_enabled",
+        "allow_package_changes",
+        "package_actions"
+      ],
+      "properties": {
+        "target_import_policy": {
+          "enum": [
+            "site-packages",
+            "repo",
+            "not-enforced",
+            "native-only"
+          ]
+        },
+        "graph_enabled": {
+          "type": "boolean"
+        },
+        "allow_package_changes": {
+          "type": "boolean"
+        },
+        "package_actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/command_record"
+          }
+        }
+      }
+    },
+    "gate_checks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/gate_check"
+      }
+    },
+    "benchmarks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/benchmark_record"
+      }
+    }
+  },
+  "$defs": {
+    "status": {
+      "enum": [
+        "passed",
+        "failed",
+        "skipped"
+      ]
+    },
+    "command_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "command",
+        "status",
+        "duration_ms",
+        "exit_code",
+        "stdout_tail",
+        "stderr_tail"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "command": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "duration_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "exit_code": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "stdout_tail": {
+          "type": "string"
+        },
+        "stderr_tail": {
+          "type": "string"
+        }
+      }
+    },
+    "gate_check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "status",
+        "message",
+        "details"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {}
+      }
+    },
+    "benchmark_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "kind",
+        "status",
+        "command",
+        "iterations",
+        "duration_ms",
+        "throughput_ops_per_sec",
+        "stdout_tail",
+        "stderr_tail",
+        "metrics"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "command": {
+          "type": "string"
+        },
+        "iterations": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "duration_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "throughput_ops_per_sec": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "stdout_tail": {
+          "type": "string"
+        },
+        "stderr_tail": {
+          "type": "string"
+        },
+        "metrics": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

@@ -280,6 +280,26 @@ print(f"Avg replay: {s['avg_replay_us']:.1f} µs")
 - The monkey-patch itself (`enable`/`disable`): Thread-safe (one-time setup)
 - HIP Graph capture: Must be done on the thread that owns the CUDA stream
 
+### Process-global capture serialization (multi-session / "2 LLMs in one process")
+
+On gfx1030/RDNA2, HIP stream-capture bookkeeping is **process-global** even with
+`hipStreamCaptureModeThreadLocal`. Two sessions that capture graphs at the same time
+corrupt each other's output (NaN) — a ROCm-runtime limitation, not a gfxGRAPH bug.
+
+gfxGRAPH guards this with one process-wide reader/writer gate in Rust
+(`rs_gfxgraph_core::capture_gate`, surfaced as `rs_gfxgraph.CaptureLock` / `ReplayLock`):
+
+- **Capture → write lock (exclusive):** every capture site (`capture_begin`/`capture_end`,
+  the standard capture context, `ShapeBucketPool` lazy bucket capture, and each
+  `ConditionalGraph` branch) holds it, so only one capture runs at a time process-wide.
+- **Replay → read lock (shared):** replays run fully concurrently; excluded only during the
+  brief one-time capture window.
+
+Net effect: multi-session capture is automatically safe — both models capture (serialized)
+and replay (parallel) with no caller action. The gate releases the GIL while blocking and
+no-ops on pure-Python installs (native extension absent). This is distinct from, and
+complementary to, the per-runner `ReentrancyGuard` in `ConditionalGraphRunner`.
+
 ## Version History
 
 - **v0.3.4** — Current. Pure-Python base install (native bridge via the `native/` companion + source Rust crates), per-branch memory pools, accurate structural fallback metrics, RDNA2 DeepSpeed-HIP + Triton kernels, dynamic-shape and adaptive-replay fixes.

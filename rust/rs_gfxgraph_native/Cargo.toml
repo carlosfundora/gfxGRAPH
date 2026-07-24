@@ -1,0 +1,19 @@
+[package]
+name = "rs_gfxgraph_native"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+libc = "0.2"
+serde_json = "1.0"
+
+[lib]
+name = "rs_gfxgraph_native"
+path = "src/lib.rs"
+
+[[bin]]
+name = "gfxgraph-native-probe"
+path = "src/bin/gfxgraph-native-probe.rs"
+
+[lints]
+workspace = true

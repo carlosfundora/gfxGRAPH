@@ -2,7 +2,9 @@
 resolver = "2"
 members = [
     "rust/rs_gfxgraph",
+    "rust/rs_gfxgraph_bench",
     "rust/rs_gfxgraph_core",
+    "rust/rs_gfxgraph_native",
     "rust/rs_gfxgraph_stats",
     "rust/rs_gfxgraph_toolbox",
 ]

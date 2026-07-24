@@ -29,4 +29,5 @@ def test_rust_bucket_selector():
     assert router.route(5) == (8, 2)
 
     # Error path test for invalid input (too large)
-    assert router.route(33) == (-1, 2)
+    with pytest.raises(ValueError, match="Input size 33 exceeds largest bucket 32. Add a larger bucket."):
+        router.route(33)

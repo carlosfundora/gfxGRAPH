@@ -1,10 +1,10 @@
 # rs_gfxgraph_core
 
-Pure-Rust shared contracts for the **gfxGRAPH** ecosystem. Defines lightweight, high-performance DTOs, schemas, and enumerations without native bindings or external execution frameworks.
+Pure-Rust shared contracts for the **gfxGRAPH** library. Defines lightweight, high-performance DTOs, schemas, and enumerations without native bindings or external execution frameworks.
 
 ---
 
-## Architectural Role in the gfxGRAPH Family
+## Architectural Role in gfxGRAPH
 
 ```text
        ┌────────────────────────┐
@@ -13,21 +13,12 @@ Pure-Rust shared contracts for the **gfxGRAPH** ecosystem. Defines lightweight, 
                    │
        ┌───────────┼───────────────┐
        ▼           ▼               ▼
-┌──────────────┐ ┌───────────────┐ ┌──────────────────┐
-│rs_gfxgraph   │ │rs_gfxgraph    │ │rs_gfxgraph_logly │
-│   _pyo3      │ │   _logly      │ │ (Deep obs crate) │
-│(PyO3 bindings│ │(Observability)│ └──────────────────┘
-└──────────────┘ └───────────────┘
+┌──────────────┐ ┌───────────────┐ 
+│gfxgraph_rs   │ │gfxgraph_stats │ 
+│   _pyo3      │ │   _rs         │ 
+│(PyO3 bindings│ │(Observability)│ 
+└──────────────┘ └───────────────┘ 
 ```
-
-### Companion Crate Naming Convention
-
-| Suffix | Role | Example |
-|---|---|---|
-| `_core` | Pure Rust logic, contracts | `rs_gfxgraph_core` |
-| `_pyo3` | Python bindings (PyO3) | `rs_gfxgraph_pyo3` |
-| `_logly` | Deep observability (5-level) | `rs_gfxgraph_logly` |
-| `_node` | Node.js bindings (napi) | Reserved |
 
 ### Architectural Analysis
 
@@ -36,14 +27,13 @@ Pure-Rust shared contracts for the **gfxGRAPH** ecosystem. Defines lightweight, 
    - **Role**: Defines the core schema models (`GfxGraphNodeSpec`), telemetry storage contracts (`GfxGraphStatsSample`), and routing enums (`GfxGraphAdapterKind`). A **pure contract layer**.
    - **Modularity Rationale**: Keeping this crate pure ensures that downstream Rust systems (database interfaces, CLI parsers, metadata pipelines) can serialize, deserialize, and reference these types without compiling heavy FFI or deep-learning runtimes.
 
-2. **`rs_gfxgraph_pyo3` (Native PyO3 Execution Crate)**:
+2. **`gfxgraph_rs` (Native PyO3 Execution Crate)**:
    - **Characteristics**: Coupled tightly to the Python interpreter via `PyO3`.
    - **Role**: Contains the high-performance conditional graph runner and bucket router for deep-learning inference workloads.
    - **Why Separate**: Merging with core would destroy the lightweight contract nature, introducing complex PyO3 and native library linkage.
 
-3. **`rs_gfxgraph_logly` (Deep Observability)**:
-   - **Characteristics**: Self-sufficient 5-level observability with pluggable sinks.
-   - **Role**: Collects live execution statistics, provides benchmark infrastructure, and integrates with `rs_logly_logger` as a drop-in.
+3. **`gfxgraph_stats_rs` (Observability)**:
+   - **Role**: Collects live execution statistics and provides benchmark infrastructure.
    - **Why Separate**: Decoupled to keep execution telemetry completely separate from pure schema contracts.
 
 ---
@@ -52,25 +42,8 @@ Pure-Rust shared contracts for the **gfxGRAPH** ecosystem. Defines lightweight, 
 
 - **Schema Contracts**: `GfxGraphNodeSpec` — graph node registry specifications.
 - **Observability Models**: `GfxGraphStatsSample` — bucket performance telemetry.
-- **Unified Error Handling**: `GfxGraphError` with conditional `rs_logly_logger` routing.
-
-## Conditional Error Reporting
-
-```toml
-[dependencies]
-rs_gfxgraph_core = { path = "../rs_gfxgraph_core", features = ["logly"] }
-```
-
-```rust
-use rs_gfxgraph_core::error::{GfxGraphError, report_error};
-
-let err = GfxGraphError::InvalidNode {
-    name: "flash_attention_decode".to_string(),
-    reason: "impl_path does not exist".to_string(),
-};
-report_error(&err, "GFX_NODE_VALIDATION");
-```
+- **Unified Error Handling**: `GfxGraphError`.
 
 ---
 
-Last Updated: 2026-05-20
+Last Updated: 2026-06-12

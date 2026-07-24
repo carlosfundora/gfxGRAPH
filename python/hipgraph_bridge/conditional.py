@@ -17,6 +17,8 @@ import torch
 from typing import Callable, Dict, Optional
 
 from hipgraph_bridge.capture_safety import (
+    capture_lock,
+    replay_lock,
     torch_graph_capture_block_reason,
     torch_cuda_execution_error,
     torch_cuda_execution_usable,
@@ -98,18 +100,21 @@ class ConditionalGraph:
                 if not unsafe_torch_graph_capture_enabled():
                     raise RuntimeError(torch_graph_capture_block_reason())
 
-                # Warmup
-                torch.cuda.synchronize()
-                with torch.no_grad():
-                    _ = fn(self._shared_input)
-                torch.cuda.synchronize()
+                # Serialize this branch's capture process-wide (gfx1030
+                # concurrent-capture corruption). One-time per branch.
+                with capture_lock():
+                    # Warmup
+                    torch.cuda.synchronize()
+                    with torch.no_grad():
+                        _ = fn(self._shared_input)
+                    torch.cuda.synchronize()
 
-                # Capture
-                graph = torch.cuda.CUDAGraph()
-                pool = torch.cuda.graph_pool_handle()
-                self._graph_pools[name] = pool
-                with torch.cuda.graph(graph, pool=pool):
-                    static_output = fn(self._shared_input)
+                    # Capture
+                    graph = torch.cuda.CUDAGraph()
+                    pool = torch.cuda.graph_pool_handle()
+                    self._graph_pools[name] = pool
+                    with torch.cuda.graph(graph, pool=pool):
+                        static_output = fn(self._shared_input)
 
                 self._graphs[name] = graph
                 self._static_outputs[name] = static_output
@@ -151,7 +156,8 @@ class ConditionalGraph:
             raise RuntimeError("Call capture() first")
 
         if self._rust_runner is not None:
-            return self._rust_runner.run(branch, input_tensor)
+            with replay_lock():
+                return self._rust_runner.run(branch, input_tensor)
 
         if branch not in self._branches:
             raise KeyError(
@@ -175,7 +181,8 @@ class ConditionalGraph:
 
         t0 = time.perf_counter()
         try:
-            self._graphs[branch].replay()
+            with replay_lock():
+                self._graphs[branch].replay()
         except Exception as e:
             _log.warning("Replay failed for branch '%s': %s — eager fallback", branch, e)
             if branch not in self._failed_branches:

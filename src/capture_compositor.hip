@@ -180,7 +180,14 @@ hipError_t hgb_compose_launch(
 
     comp->last_stream = stream;
 
+    uint64_t launch_start_ns = hgb_monotonic_ns();
     hipError_t err = hipGraphLaunch(comp->exec, stream);
+    hgb_profiler_record(
+        HGB_PROFILE_EVENT_COMPOSE_LAUNCH,
+        hgb_monotonic_ns() - launch_start_ns,
+        (uint64_t)(uintptr_t)comp->exec,
+        (uint64_t)comp->num_children
+    );
     if (err != hipSuccess) {
         return err;
     }

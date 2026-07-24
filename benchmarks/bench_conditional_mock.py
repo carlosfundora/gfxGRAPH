@@ -20,8 +20,9 @@ class MockTensor:
         return True
 
 mock_torch.Tensor = MockTensor
-mock_torch.__mock__ = True
 sys.modules['torch'] = mock_torch
+import hipgraph_bridge.capture_safety
+hipgraph_bridge.capture_safety.torch_cuda_execution_probe = lambda: (True, "mocked")
 
 from hipgraph_bridge.conditional import ConditionalGraph
 

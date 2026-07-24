@@ -61,7 +61,14 @@ hipError_t hgb_pipeline_create(
         return err;
     }
 
+    uint64_t upload_start_ns = hgb_monotonic_ns();
     err = hipGraphUpload(out->exec[0], out->stream);
+    hgb_profiler_record(
+        HGB_PROFILE_EVENT_PIPELINE_UPLOAD,
+        hgb_monotonic_ns() - upload_start_ns,
+        (uint64_t)(uintptr_t)out->exec[0],
+        0
+    );
     if (err == hipSuccess) {
         out->state[0] = HGB_EXEC_UPLOADED;
     } else {
@@ -70,6 +77,12 @@ hipError_t hgb_pipeline_create(
 
     out->active = 0;
     out->launched = 0;
+    hgb_profiler_record(
+        HGB_PROFILE_EVENT_PIPELINE_CREATE,
+        0,
+        (uint64_t)(uintptr_t)graph,
+        2
+    );
     hgb_log("Pipeline created: serialized double-buffer, event-tracked");
     return hipSuccess;
 }
@@ -106,7 +119,14 @@ hipError_t hgb_pipeline_launch(hgb_pipeline_t* pipe) {
         }
     }
 
+    uint64_t launch_start_ns = hgb_monotonic_ns();
     hipError_t err = hipGraphLaunch(pipe->exec[cur], pipe->stream);
+    hgb_profiler_record(
+        HGB_PROFILE_EVENT_PIPELINE_LAUNCH,
+        hgb_monotonic_ns() - launch_start_ns,
+        (uint64_t)(uintptr_t)pipe->exec[cur],
+        (uint64_t)cur
+    );
     if (err != hipSuccess) return err;
 
     err = hipEventRecord(pipe->event, pipe->stream);
@@ -143,13 +163,30 @@ hipError_t hgb_pipeline_update_kernel(
 
     int target = pipe->active;
 
+    uint64_t update_start_ns = hgb_monotonic_ns();
     hipError_t err = hipGraphExecKernelNodeSetParams(
         pipe->exec[target], node, params
+    );
+    hgb_profiler_record(
+        HGB_PROFILE_EVENT_PIPELINE_UPDATE,
+        hgb_monotonic_ns() - update_start_ns,
+        (uint64_t)(uintptr_t)node,
+        (uint64_t)target
     );
     if (err != hipSuccess) return err;
 
     pipe->state[target] = HGB_EXEC_IDLE;
     return hipSuccess;
+}
+
+hipError_t hgb_pipeline_update_and_launch(
+    hgb_pipeline_t*       pipe,
+    hipGraphNode_t        node,
+    hipKernelNodeParams*  params
+) {
+    hipError_t err = hgb_pipeline_update_kernel(pipe, node, params);
+    if (err != hipSuccess) return err;
+    return hgb_pipeline_launch(pipe);
 }
 
 void hgb_pipeline_destroy(hgb_pipeline_t* pipe) {

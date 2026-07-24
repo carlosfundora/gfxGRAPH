@@ -850,7 +850,7 @@ Phase 1 + 2 alone cover the two **High severity** gaps and deliver
 | HIPIFY mappings | `ai/build/tools/HIPIFY/src/` | CUDA→HIP symbol table |
 | aiter JIT | `ai/build/resources/aiter/aiter/jit/` | .so build pattern |
 | AOTriton | `ai/build/resources/aotriton/` | Drop-in .so pattern |
-| Triton cache | `ai/build/resources/kernel-cache/triton-gfx1031/` | HSACO examples |
+| Triton cache | `ai/GFX-KERNELS-HIP-PY-RS/py/frozen-jit-kernel-cache/triton-gfx1030/` | HSACO examples (gfx1030; relocated 2026-06-18) |
 | kernel-learning | `ai/build/resources/kernel-learning/09-pytorch-custom-ops/` | Op registration |
 | TheRock CMake | `ai/build/resources/TheRock/cmake/` | Build infrastructure |
 | hipGraph report | `ai/build/resources/hipgraph-analysis-report.md` | Performance data |

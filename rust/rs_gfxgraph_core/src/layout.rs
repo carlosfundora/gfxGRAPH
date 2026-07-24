@@ -158,12 +158,45 @@ impl TensorLayout {
         })
     }
 
+    /// Checks whether the tensor layout is contiguous in row-major order.
+    ///
+    /// This implementation is optimized to be entirely allocation-free (no heap allocation).
+    /// It validates strides inline, which allows the compiler to fully optimize and unroll
+    /// the loop, taking advantage of SIMD/AVX instructions on the host CPU.
+    #[inline]
     pub fn is_row_contiguous(&self) -> bool {
-        StrideSpec::row_major(&self.shape)
-            .map(|expected| expected == self.strides)
-            .unwrap_or(false)
+        let rank = self.shape.rank();
+        if rank == 0 {
+            return true;
+        }
+
+        let dims = self.shape.dims();
+        let strides = self.strides.strides();
+        if strides.len() != rank {
+            return false;
+        }
+
+        // The innermost dimension must have a stride of 1 for row-major contiguity
+        if strides[rank - 1] != 1 {
+            return false;
+        }
+
+        // Validate remaining strides from right to left (innermost to outermost)
+        // expected_stride[i] = expected_stride[i+1] * shape[i+1]
+        for i in (0..rank - 1).rev() {
+            match strides[i + 1].checked_mul(dims[i + 1]) {
+                Some(expected) => {
+                    if strides[i] != expected {
+                        return false;
+                    }
+                }
+                None => return false,
+            }
+        }
+        true
     }
 
+    /// Evaluates the contiguity type of the tensor layout.
     pub fn contiguity(&self) -> Contiguity {
         match self.kind {
             LayoutKind::RowMajor if self.is_row_contiguous() => Contiguity::Contiguous,
@@ -175,30 +208,49 @@ impl TensorLayout {
         }
     }
 
+    /// Computes the linear memory offset for the given multi-dimensional indices.
+    ///
+    /// Optimized for compiler auto-vectorization (e.g. AVX2/AVX-512) by performing
+    /// linear zip-iterations and preventing nested dynamic bounds checks inside the loop.
+    /// Returns a ShapeError if indices are out of bounds or if multiplication overflows.
+    #[inline]
     pub fn linear_offset(&self, indices: &[usize]) -> Result<usize, ShapeError> {
-        if indices.len() != self.shape.rank() {
+        let rank = self.shape.rank();
+        if indices.len() != rank {
             return Err(ShapeError::AxisOutOfBounds {
                 axis: indices.len(),
-                rank: self.shape.rank(),
+                rank,
             });
         }
 
+        let dims = self.shape.dims();
+        let strides = self.strides.strides();
+
         let mut offset = 0usize;
-        for (axis, index) in indices.iter().copied().enumerate() {
-            let dim = self.shape.dim(axis)?;
+        for i in 0..rank {
+            let index = indices[i];
+            let dim = dims[i];
             if index >= dim {
                 return Err(ShapeError::AxisOutOfBounds {
                     axis: index,
                     rank: dim,
                 });
             }
+            let prod = index
+                .checked_mul(strides[i])
+                .ok_or(ShapeError::ElementCountOverflow)?;
             offset = offset
-                .checked_add(index * self.strides.strides()[axis])
+                .checked_add(prod)
                 .ok_or(ShapeError::ElementCountOverflow)?;
         }
         Ok(offset)
     }
 
+    /// Checks if a tensor copy is required before executing a graph capture.
+    ///
+    /// Graph capture on ROCm/HIP requires tensors to be contiguous in memory
+    /// to prevent incorrect or overlapping buffer re-recordings.
+    #[inline]
     pub fn needs_copy_for_graph_capture(&self) -> bool {
         !self.is_row_contiguous() || matches!(self.kind, LayoutKind::Custom)
     }

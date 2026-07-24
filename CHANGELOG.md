@@ -2,6 +2,39 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.1.0] - 2026-06-21
+
+### Fixed
+- **Concurrent multi-session graph capture corruption on gfx1030/RDNA2**: when two
+  in-process LLM sessions captured CUDA/HIP graphs at the same time, output could come
+  back as NaN. Root cause is in the ROCm runtime, not gfxGRAPH: HIP stream-capture
+  bookkeeping is **process-global** even with `hipStreamCaptureModeThreadLocal`, so
+  concurrent captures clobber each other. gfxGRAPH now serializes capture process-wide
+  with a single Rust reader/writer gate (`rs_gfxgraph_core::capture_gate`, exposed as
+  `rs_gfxgraph.CaptureLock` / `ReplayLock`): **capture takes the write lock (one at a
+  time, excludes in-flight replay); replay takes the shared read lock (fully concurrent
+  across sessions).** Both LLMs still capture their graphs — just never simultaneously —
+  and replay stays parallel, so the high-level-capture value proposition is preserved.
+  The lock is acquired with the GIL released to avoid deadlock, and degrades to a no-op
+  when the native extension is absent (pure-Python install). Every capture site
+  (`capture_begin`/`capture_end`, the standard capture context, shape-bucket lazy capture,
+  and conditional-branch capture) is serialized; replay sites take the shared lock.
+
+## [rust-hip-cpp] - 2026-06-16
+
+### Added
+- **Integrated Rust-C++-HIP Launcher & Interposer**:
+  - Programmatic `HSA_OVERRIDE_GFX_VERSION=10.3.0` auto-injection on library initialization for AMD RDNA2 devices (gfx1030/gfx1031).
+  - Dynamically resolved CPU Core Complex (CCX) / L3 cache thread affinity pinning on AMD Zen CPUs (Ryzen 9 3900X) to eliminate Infinity Fabric thread-switching latency.
+  - Zero-allocation, AVX2-friendly loop contiguity verification and multidimensional offset computation inside `rs_gfxgraph_core` layout modules.
+  - Thread-safe RAII re-entrancy prevention guard (`ReentrancyGuard`) in `ConditionalGraphRunner` wrapper to cleanly route overlapping streams to safe eager fallbacks.
+  - Multi-symbol C++ CUDA compatibility interposer (`cuda_intercept.c`) with a native update-and-launch pipeline shortcut bypassing Python overhead.
+- **Benchmarking & Testing Hardening**:
+  - Added new native C++/HIP test executable `test_routing.hip` to verify shape bucket selection and bounds checks directly on the GPU.
+  - Created `gfxgraph-benchmarking` skill to guide profiling, public benchmarking (`bench_readme_public.py`), and micro-benchmarking on ROCm.
+  - Authored a comprehensive `benchmarking-guide.md` covering the micro-benchmark suites, public GPU benchmark config, and provenance JSON schema.
+  - Patched `bench_routing.py` and `bench_conditional_mock.py` to support graceful mock-execution fallbacks on CPU/system environments.
+
 ## [1.0.1] - 2026-06-16
 
 ### Fixed

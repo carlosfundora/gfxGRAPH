@@ -1,0 +1,10 @@
+{
+  "candidate": "python/hipgraph_bridge/conditional.py",
+  "implementation": "after",
+  "command": "python benchmarks/bench_conditional_mock.py",
+  "timestamp": "2026-05-08T00:00:00Z",
+  "iterations": 200000,
+  "input_description": "Alternating branch execution (mocked GPU)",
+  "duration_ms": 8096.94689099706,
+  "throughput": "24700.67 ops/sec"
+}
