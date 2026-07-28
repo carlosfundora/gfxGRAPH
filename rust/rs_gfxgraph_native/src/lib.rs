@@ -403,7 +403,9 @@ impl NativeBridge {
             return Err(NativeRuntimeError::HipError(code));
         }
         if handle.is_null() {
-            return Err(NativeRuntimeError::NullHandle("hgb_decode_pool_handle_create"));
+            return Err(NativeRuntimeError::NullHandle(
+                "hgb_decode_pool_handle_create",
+            ));
         }
         Ok(NativeCaptureSafeDecode {
             bridge: self,
