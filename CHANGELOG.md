@@ -119,7 +119,7 @@ First stable release (promoted from the 0.5.x line; never separately published).
 ## [0.3.4] - 2026-06-12
 
 ### Added
-- Integrated pure-Rust companion crates `rs_gfxgraph_core` and `rs_gfxgraph_toolbox` into the `rust/` directory, stripping out irrelevant "federation" terminology.
+- Integrated pure-Rust companion crates `rs_gfxgraph_core` and `rs_gfxgraph_toolbox` into the `rust/` directory, stripping out irrelevant "collective" terminology.
 
 ### Fixed
 - **Packaging/Build**: Fully consolidated the CMake and Rust build pipelines into a single setuptools `setup.py` that builds both the `libhipgraph_bridge.so` native bridge and the Rust extensions using `setuptools-rust`. Fixed `MANIFEST.in` to include headers and Rust source.
