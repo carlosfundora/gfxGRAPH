@@ -332,6 +332,10 @@ impl NativeBridge {
         (samples, counters)
     }
 
+    /// Wrap an already-created native HIP graph in the generic pipeline.
+    ///
+    /// # Safety
+    /// `graph` must be a valid live `hipGraph_t` compatible with the loaded bridge/device.
     pub unsafe fn pipeline_from_raw_graph(
         &self,
         graph: *mut c_void,
@@ -350,6 +354,10 @@ impl NativeBridge {
         })
     }
 
+    /// Compose raw native HIP graphs using bridge parent indices.
+    ///
+    /// # Safety
+    /// Every graph handle and dependency index must be valid for the loaded HIP context.
     pub unsafe fn composed_from_raw_graphs(
         &self,
         sub_graphs: &mut [*mut c_void],
@@ -483,6 +491,10 @@ impl<'a> NativePipeline<'a> {
         }
     }
 
+    /// Update one captured kernel node in place.
+    ///
+    /// # Safety
+    /// `node` must belong to this pipeline and `params` must point to valid HIP kernel-node parameters.
     pub unsafe fn update_kernel(
         &self,
         node: *mut c_void,
@@ -495,6 +507,10 @@ impl<'a> NativePipeline<'a> {
         }
     }
 
+    /// Update one captured kernel node and immediately replay.
+    ///
+    /// # Safety
+    /// `node` must belong to this pipeline and `params` must point to valid HIP kernel-node parameters.
     pub unsafe fn update_and_launch(
         &self,
         node: *mut c_void,
@@ -529,6 +545,10 @@ impl<'a> NativeComposedGraph<'a> {
         self.handle
     }
 
+    /// Launch the composed graph on a caller-owned HIP stream.
+    ///
+    /// # Safety
+    /// `stream` must be a valid live stream for the same HIP device/context as this graph.
     pub unsafe fn launch(&self, stream: *mut c_void) -> Result<(), NativeRuntimeError> {
         match unsafe { (self.bridge.api.composed_handle_launch)(self.handle, stream) } {
             0 => Ok(()),
@@ -536,17 +556,36 @@ impl<'a> NativeComposedGraph<'a> {
         }
     }
 
+    /// Replace one logical child graph inside the composed executable.
+    ///
+    /// # Safety
+    /// `new_sub_graph` must be a valid compatible live `hipGraph_t` in the same HIP context.
     pub unsafe fn update_child(
         &self,
-        child_index: c_int,
+        logical_child_index: usize,
         new_sub_graph: *mut c_void,
     ) -> Result<(), NativeRuntimeError> {
+        let native_child_index = *self
+            .logical_to_native
+            .get(logical_child_index)
+            .ok_or(NativeRuntimeError::InvalidLogicalChild(logical_child_index))?;
+        let native_child_index = c_int::try_from(native_child_index)
+            .map_err(|_| NativeRuntimeError::Lifecycle(GraphLifecycleError::SizeOverflow))?;
         match unsafe {
-            (self.bridge.api.composed_handle_update_child)(self.handle, child_index, new_sub_graph)
+            (self.bridge.api.composed_handle_update_child)(
+                self.handle,
+                native_child_index,
+                new_sub_graph,
+            )
         } {
             0 => Ok(()),
             code => Err(NativeRuntimeError::HipError(code)),
         }
+    }
+
+    #[must_use]
+    pub fn native_child_index(&self, logical_child_index: usize) -> Option<usize> {
+        self.logical_to_native.get(logical_child_index).copied()
     }
 }
 
@@ -556,6 +595,66 @@ impl Drop for NativeComposedGraph<'_> {
             unsafe { (self.bridge.api.composed_handle_destroy)(self.handle) };
             self.handle = ptr::null_mut();
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct NativeCompositionLayout {
+    native_to_logical: Vec<usize>,
+    logical_to_native: Vec<usize>,
+    deps: Vec<c_int>,
+}
+
+impl NativeCompositionLayout {
+    fn compile(plan: &GraphCompositionPlan) -> Result<Self, NativeRuntimeError> {
+        plan.validate()?;
+        let count = plan.parents.len();
+        let mut native_to_logical = Vec::with_capacity(count);
+        let mut emitted = vec![false; count];
+
+        fn emit(
+            logical: usize,
+            plan: &GraphCompositionPlan,
+            emitted: &mut [bool],
+            order: &mut Vec<usize>,
+        ) {
+            if emitted[logical] {
+                return;
+            }
+            if let Some(parent) = plan.parents[logical] {
+                emit(parent, plan, emitted, order);
+            }
+            emitted[logical] = true;
+            order.push(logical);
+        }
+
+        for logical in 0..count {
+            emit(logical, plan, &mut emitted, &mut native_to_logical);
+        }
+
+        let mut logical_to_native = vec![0usize; count];
+        for (native, &logical) in native_to_logical.iter().enumerate() {
+            logical_to_native[logical] = native;
+        }
+        let deps = native_to_logical
+            .iter()
+            .map(|&logical| match plan.parents[logical] {
+                None => Ok(-1),
+                Some(parent) => c_int::try_from(logical_to_native[parent])
+                    .map_err(|_| NativeRuntimeError::Lifecycle(GraphLifecycleError::SizeOverflow)),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        debug_assert!(
+            deps.iter()
+                .enumerate()
+                .all(|(native, parent)| *parent < 0 || (*parent as usize) < native)
+        );
+        Ok(Self {
+            native_to_logical,
+            logical_to_native,
+            deps,
+        })
     }
 }
 
@@ -675,9 +774,11 @@ mod tests {
     #[test]
     fn default_candidates_include_repo_build_output() {
         let candidates = default_library_candidates("/tmp/gfxGRAPH");
-        assert!(candidates
-            .iter()
-            .any(|path| path.ends_with("build/libhipgraph_bridge.so")));
+        assert!(
+            candidates
+                .iter()
+                .any(|path| path.ends_with("build/libhipgraph_bridge.so"))
+        );
     }
 
     #[test]
