@@ -5,6 +5,7 @@
 //! health checks, versioning, and telemetry.
 
 use libc::{c_char, c_int, c_void};
+use rs_gfxgraph_core::{GraphCompositionPlan, GraphLifecycleError};
 use std::env;
 use std::error::Error;
 use std::ffi::{CStr, CString};
@@ -100,6 +101,8 @@ pub enum NativeRuntimeError {
     HipError(i32),
     NullHandle(&'static str),
     LengthMismatch { graphs: usize, deps: usize },
+    InvalidLogicalChild(usize),
+    Lifecycle(GraphLifecycleError),
 }
 
 impl fmt::Display for NativeRuntimeError {
@@ -111,11 +114,21 @@ impl fmt::Display for NativeRuntimeError {
                 f,
                 "composed graph input length mismatch: {graphs} graphs, {deps} deps"
             ),
+            Self::InvalidLogicalChild(child) => {
+                write!(f, "logical composed-graph child {child} is out of range")
+            }
+            Self::Lifecycle(error) => write!(f, "invalid graph lifecycle contract: {error}"),
         }
     }
 }
 
 impl Error for NativeRuntimeError {}
+
+impl From<GraphLifecycleError> for NativeRuntimeError {
+    fn from(error: GraphLifecycleError) -> Self {
+        Self::Lifecycle(error)
+    }
+}
 
 type HgbInit = unsafe extern "C" fn() -> c_int;
 type HgbShutdown = unsafe extern "C" fn();
@@ -367,7 +380,35 @@ impl NativeBridge {
         Ok(NativeComposedGraph {
             bridge: self,
             handle,
+            logical_to_native: (0..sub_graphs.len()).collect(),
         })
+    }
+
+    /// Create a composed native graph from the validated generic topology contract.
+    ///
+    /// # Safety
+    /// Every raw graph handle must remain valid for native composition and must belong to
+    /// the active HIP device/context expected by the bridge.
+    pub unsafe fn composed_from_plan(
+        &self,
+        sub_graphs: &mut [*mut c_void],
+        plan: &GraphCompositionPlan,
+    ) -> Result<NativeComposedGraph<'_>, NativeRuntimeError> {
+        if sub_graphs.len() != plan.parents.len() {
+            return Err(NativeRuntimeError::LengthMismatch {
+                graphs: sub_graphs.len(),
+                deps: plan.parents.len(),
+            });
+        }
+        let layout = NativeCompositionLayout::compile(plan)?;
+        let mut native_graphs = layout
+            .native_to_logical
+            .iter()
+            .map(|&logical| sub_graphs[logical])
+            .collect::<Vec<_>>();
+        let mut graph = unsafe { self.composed_from_raw_graphs(&mut native_graphs, &layout.deps) }?;
+        graph.logical_to_native = layout.logical_to_native;
+        Ok(graph)
     }
 
     /// Create a capture-safe decode pool. `capture_fn` (signature [`HgbDecodeCaptureFn`]) captures a
@@ -480,6 +521,7 @@ impl Drop for NativePipeline<'_> {
 pub struct NativeComposedGraph<'a> {
     bridge: &'a NativeBridge,
     handle: *mut c_void,
+    logical_to_native: Vec<usize>,
 }
 
 impl<'a> NativeComposedGraph<'a> {
