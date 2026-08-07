@@ -47,3 +47,7 @@ Pure-Rust shared contracts for the **gfxGRAPH** library. Defines lightweight, hi
 ---
 
 Last Updated: 2026-06-12
+
+## Generic graph lifecycle contracts
+
+The core also exports RAII capture/replay leases, bounded capture retry policy, capture-stable persistent metadata layouts, graph update modes, and validated child-graph composition plans. Native HIP execution remains in the native bridge; workload-specific state belongs in the consuming kernel crate.

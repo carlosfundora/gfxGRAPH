@@ -105,7 +105,7 @@ impl KernelLaunchShape {
         wave.validate()?;
         self.grid.validate()?;
         self.block.validate()?;
-        if self.block.threads() % wave.wave_size != 0 {
+        if !self.block.threads().is_multiple_of(wave.wave_size) {
             return Err(WaveError::BlockNotWaveAligned {
                 block_threads: self.block.threads(),
                 wave_size: wave.wave_size,
@@ -117,12 +117,11 @@ impl KernelLaunchShape {
     pub fn occupancy_hint(&self, wave: WavefrontSpec) -> Result<OccupancyHint, WaveError> {
         self.validate(wave)?;
         let waves_per_block = self.block.threads() / wave.wave_size;
-        let blocks_per_cu = if waves_per_block == 0 {
-            0
-        } else {
-            wave.waves_per_eu / waves_per_block
-        }
-        .max(1);
+        let blocks_per_cu = wave
+            .waves_per_eu
+            .checked_div(waves_per_block)
+            .unwrap_or(0)
+            .max(1);
         Ok(OccupancyHint {
             waves_per_block,
             blocks_per_cu,

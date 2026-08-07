@@ -24,6 +24,50 @@ use parking_lot::RawRwLock;
 /// The single process-wide capture/replay gate.
 static CAPTURE_GATE: RawRwLock = RawRwLock::INIT;
 
+/// RAII lease for process-global HIP graph capture.
+#[derive(Debug)]
+pub struct CaptureLease {
+    _private: (),
+}
+
+impl CaptureLease {
+    #[inline]
+    #[must_use]
+    pub fn acquire() -> Self {
+        lock_capture();
+        Self { _private: () }
+    }
+}
+
+impl Drop for CaptureLease {
+    #[inline]
+    fn drop(&mut self) {
+        unlock_capture();
+    }
+}
+
+/// RAII lease for a process-global HIP graph replay.
+#[derive(Debug)]
+pub struct ReplayLease {
+    _private: (),
+}
+
+impl ReplayLease {
+    #[inline]
+    #[must_use]
+    pub fn acquire() -> Self {
+        lock_replay();
+        Self { _private: () }
+    }
+}
+
+impl Drop for ReplayLease {
+    #[inline]
+    fn drop(&mut self) {
+        unlock_replay();
+    }
+}
+
 /// Acquire the exclusive capture lock.
 ///
 /// Blocks until no other capture (writer) and no in-flight replay (reader)

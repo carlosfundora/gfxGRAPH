@@ -6,6 +6,7 @@ pub mod capture_gate;
 pub mod convert;
 pub mod error;
 pub mod geometry;
+pub mod graph_lifecycle;
 pub mod layout;
 pub mod registry;
 pub mod router;
@@ -19,13 +20,19 @@ pub mod wave;
 pub mod wave_gang;
 
 pub use adapter::GfxGraphAdapterKind;
-pub use capture_gate::{lock_capture, lock_replay, unlock_capture, unlock_replay};
+pub use capture_gate::{
+    lock_capture, lock_replay, unlock_capture, unlock_replay, CaptureLease, ReplayLease,
+};
 pub use convert::{
     DTypeConversionContract, DTypeKind, PageTransform, ShapeLayoutConversionPlan, StrideTransform,
 };
 pub use error::{report_error, GfxGraphError};
 pub use geometry::{
     point_to_segment_distance, Bounds2, Bounds3, GeometryError, Point2, Point3, Polygon2,
+};
+pub use graph_lifecycle::{
+    CaptureStableMetadataPlan, GraphCapturePolicy, GraphCompositionPlan, GraphLifecycleError,
+    GraphUpdateMode, PersistentMetadataRegion,
 };
 pub use layout::{
     Contiguity, LayoutConversionPlan, LayoutKind, PageLayoutSpec, StrideSpec, TensorLayout,

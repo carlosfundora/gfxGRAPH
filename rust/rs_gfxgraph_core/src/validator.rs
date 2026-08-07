@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// When validation is enabled, graph replay outputs are compared against
 /// eager-mode outputs to detect divergence (e.g. PyTorch issue #155684).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct ValidatorConfig {
     /// Whether validation is currently enabled.
     validation_enabled: bool,
@@ -36,14 +36,6 @@ impl ValidatorConfig {
     /// Disable validation.
     pub fn disable(&mut self) {
         self.validation_enabled = false;
-    }
-}
-
-impl Default for ValidatorConfig {
-    fn default() -> Self {
-        Self {
-            validation_enabled: false,
-        }
     }
 }
 
