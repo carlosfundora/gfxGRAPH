@@ -2348,6 +2348,7 @@ name = "rs_gfxgraph_native"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "rs_gfxgraph_core",
  "serde_json",
 ]
 
