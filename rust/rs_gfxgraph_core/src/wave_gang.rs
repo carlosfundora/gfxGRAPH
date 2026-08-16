@@ -20,6 +20,114 @@ pub struct ConcurrentWaveGangPlan {
     pub concurrent_replays: u32,
 }
 
+/// Policy for tiling a very large logical Wave32 workload into bounded replay gangs.
+///
+/// The planner never changes the hardware-native wave width. It only chooses how
+/// many workgroups are submitted per replay and how many replays may be admitted
+/// concurrently under an explicit in-flight-wave budget.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WaveGangScalePolicy {
+    /// Maximum workgroups packed into one captured/replayed graph invocation.
+    pub max_workgroups_per_replay: u32,
+    /// Maximum number of concurrent replay leases, irrespective of wave budget.
+    pub max_concurrent_replays: u32,
+    /// Maximum logical waves admitted across all concurrent replay leases.
+    pub max_in_flight_waves: u64,
+}
+
+impl WaveGangScalePolicy {
+    /// Conservative gfx1030 policy for large streams. The wave budget is explicit
+    /// so callers may replace this with a measured device-specific value.
+    pub fn gfx1030(max_in_flight_waves: u64) -> Result<Self, WaveGangError> {
+        if max_in_flight_waves == 0 {
+            return Err(WaveGangError::InvalidWaveBudget(0));
+        }
+        Ok(Self {
+            max_workgroups_per_replay: 1024,
+            max_concurrent_replays: 32,
+            max_in_flight_waves,
+        })
+    }
+
+    pub fn validate(self) -> Result<(), WaveGangError> {
+        if self.max_workgroups_per_replay == 0 {
+            return Err(WaveGangError::InvalidWorkgroupsPerReplay(0));
+        }
+        if self.max_concurrent_replays == 0 {
+            return Err(WaveGangError::InvalidConcurrentReplays(0));
+        }
+        if self.max_in_flight_waves == 0 {
+            return Err(WaveGangError::InvalidWaveBudget(0));
+        }
+        Ok(())
+    }
+}
+
+/// Result of scaling an arbitrarily large logical workload into bounded replay tiles.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScaledWaveGangPlan {
+    /// Admission plan used by the replay gate.
+    pub replay: ConcurrentWaveGangPlan,
+    /// Total logical workgroups in the workload.
+    pub total_workgroups: u64,
+    /// Number of replay tiles required to cover the whole workload exactly.
+    pub replay_tiles: u64,
+    /// Number of workgroups in the final replay tile.
+    pub tail_workgroups: u32,
+}
+
+impl ScaledWaveGangPlan {
+    /// Build a Wave32 replay tiling for a large workload while respecting both
+    /// the concurrency cap and the explicit in-flight-wave budget.
+    pub fn rdna2_wave32(
+        waves_per_workgroup: u32,
+        total_workgroups: u64,
+        policy: WaveGangScalePolicy,
+    ) -> Result<Self, WaveGangError> {
+        if total_workgroups == 0 {
+            return Err(WaveGangError::InvalidTotalWorkgroups(0));
+        }
+        policy.validate()?;
+        let max_wg = u64::from(policy.max_workgroups_per_replay).min(total_workgroups);
+        let workgroups_per_replay =
+            u32::try_from(max_wg).map_err(|_| WaveGangError::ArithmeticOverflow)?;
+        let waves_per_replay = u64::from(waves_per_workgroup)
+            .checked_mul(u64::from(workgroups_per_replay))
+            .ok_or(WaveGangError::ArithmeticOverflow)?;
+        if waves_per_replay == 0 || waves_per_replay > policy.max_in_flight_waves {
+            return Err(WaveGangError::ReplayExceedsWaveBudget {
+                waves_per_replay,
+                maximum: policy.max_in_flight_waves,
+            });
+        }
+        let budget_concurrency = policy.max_in_flight_waves / waves_per_replay;
+        let concurrent_replays = u32::try_from(
+            budget_concurrency
+                .max(1)
+                .min(u64::from(policy.max_concurrent_replays)),
+        )
+        .map_err(|_| WaveGangError::ArithmeticOverflow)?;
+        let replay = ConcurrentWaveGangPlan::rdna2_wave32(
+            waves_per_workgroup,
+            workgroups_per_replay,
+            concurrent_replays,
+        )?;
+        let replay_tiles = total_workgroups.div_ceil(u64::from(workgroups_per_replay));
+        let tail = total_workgroups % u64::from(workgroups_per_replay);
+        let tail_workgroups = if tail == 0 {
+            workgroups_per_replay
+        } else {
+            u32::try_from(tail).map_err(|_| WaveGangError::ArithmeticOverflow)?
+        };
+        Ok(Self {
+            replay,
+            total_workgroups,
+            replay_tiles,
+            tail_workgroups,
+        })
+    }
+}
+
 impl ConcurrentWaveGangPlan {
     pub fn new(
         native_wave_size: u32,
@@ -180,8 +288,11 @@ impl ConcurrentWaveGangGate {
     }
 
     pub fn acquire_replay(&self) -> ConcurrentWaveReplayLease<'_> {
-        let gang = self.acquire();
+        // Global order is replay-gate -> wave-gang slot. Acquiring the gang first
+        // can deadlock behind a queued capture writer while occupying capacity
+        // that an existing replay reader needs in order to drain.
         lock_replay();
+        let gang = self.acquire();
         ConcurrentWaveReplayLease {
             gang: Some(gang),
             replay_locked: true,
@@ -239,11 +350,12 @@ pub struct ConcurrentWaveReplayLease<'a> {
 
 impl Drop for ConcurrentWaveReplayLease<'_> {
     fn drop(&mut self) {
+        // Reverse acquisition order: release the gang slot before replay gate.
+        self.gang.take();
         if self.replay_locked {
             unlock_replay();
             self.replay_locked = false;
         }
-        self.gang.take();
     }
 }
 
@@ -253,6 +365,9 @@ pub enum WaveGangError {
     InvalidWavesPerWorkgroup(u32),
     InvalidWorkgroupsPerReplay(u32),
     InvalidConcurrentReplays(u32),
+    InvalidTotalWorkgroups(u64),
+    InvalidWaveBudget(u64),
+    ReplayExceedsWaveBudget { waves_per_replay: u64, maximum: u64 },
     WorkgroupTooLarge { threads: u32, maximum: u32 },
     ArithmeticOverflow,
 }
@@ -272,6 +387,17 @@ impl std::fmt::Display for WaveGangError {
             Self::InvalidConcurrentReplays(value) => {
                 write!(formatter, "invalid concurrent replay count {value}")
             }
+            Self::InvalidTotalWorkgroups(value) => {
+                write!(formatter, "invalid total workgroup count {value}")
+            }
+            Self::InvalidWaveBudget(value) => write!(formatter, "invalid wave budget {value}"),
+            Self::ReplayExceedsWaveBudget {
+                waves_per_replay,
+                maximum,
+            } => write!(
+                formatter,
+                "one replay needs {waves_per_replay} waves, exceeding wave budget {maximum}"
+            ),
             Self::WorkgroupTooLarge { threads, maximum } => write!(
                 formatter,
                 "workgroup requires {threads} threads, exceeding maximum {maximum}"
@@ -308,6 +434,39 @@ mod tests {
             WaveGangError::WorkgroupTooLarge {
                 threads: 1_056,
                 maximum: 1_024,
+            }
+        );
+    }
+
+    #[test]
+    fn scaled_wave32_plan_tiles_massive_work_without_widening_the_wave() {
+        let policy = WaveGangScalePolicy {
+            max_workgroups_per_replay: 256,
+            max_concurrent_replays: 8,
+            max_in_flight_waves: 4096,
+        };
+        let plan = ScaledWaveGangPlan::rdna2_wave32(4, 1_000_000, policy).unwrap();
+        assert_eq!(plan.replay.native_wave_size, 32);
+        assert_eq!(plan.replay.workgroups_per_replay, 256);
+        assert_eq!(plan.replay.waves_per_replay().unwrap(), 1024);
+        assert_eq!(plan.replay.concurrent_replays, 4);
+        assert_eq!(plan.replay.peak_in_flight_waves().unwrap(), 4096);
+        assert_eq!(plan.replay_tiles, 3907);
+        assert_eq!(plan.tail_workgroups, 64);
+    }
+
+    #[test]
+    fn scaled_plan_rejects_one_replay_larger_than_wave_budget() {
+        let policy = WaveGangScalePolicy {
+            max_workgroups_per_replay: 64,
+            max_concurrent_replays: 8,
+            max_in_flight_waves: 127,
+        };
+        assert_eq!(
+            ScaledWaveGangPlan::rdna2_wave32(2, 4096, policy).unwrap_err(),
+            WaveGangError::ReplayExceedsWaveBudget {
+                waves_per_replay: 128,
+                maximum: 127,
             }
         );
     }
