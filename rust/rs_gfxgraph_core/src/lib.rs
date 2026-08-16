@@ -53,6 +53,6 @@ pub use wave::{
     WorkgroupShape,
 };
 pub use wave_gang::{
-    ConcurrentWaveGangGate, ConcurrentWaveGangPlan, ConcurrentWaveReplayLease, WaveGangError,
-    WaveGangLease, WaveGangReplaySnapshot,
+    ConcurrentWaveGangGate, ConcurrentWaveGangPlan, ConcurrentWaveReplayLease, ScaledWaveGangPlan,
+    WaveGangError, WaveGangLease, WaveGangReplaySnapshot, WaveGangScalePolicy,
 };
