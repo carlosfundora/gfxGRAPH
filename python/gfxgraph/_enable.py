@@ -72,24 +72,22 @@ except ImportError:
 
 def bump(counter: str, amount: int = 1) -> None:
     """Thread-safe counter increment. Used by bridge modules."""
-    if _HAS_RUST_STATS:
-        rs_gfxgraph_stats.bump(counter, amount)
-        return
     with _stats_lock:
         _stats[counter] = _stats.get(counter, 0) + amount
 
 
 def record_replay_us(us: float) -> None:
     """Record a replay duration in microseconds, update running average."""
-    if _HAS_RUST_STATS:
-        rs_gfxgraph_stats.record_replay_us(us)
-        return
     with _stats_lock:
         _stats["replay_count"] += 1
         _stats["_total_replay_us"] += us
         _stats["avg_replay_us"] = (
             _stats["_total_replay_us"] / _stats["replay_count"]
         )
+
+if _HAS_RUST_STATS:
+    bump = rs_gfxgraph_stats.bump
+    record_replay_us = rs_gfxgraph_stats.record_replay_us
 
 def get_validate_mode() -> bool:
     """Check whether validation mode is active."""
